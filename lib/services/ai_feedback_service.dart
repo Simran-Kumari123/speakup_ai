@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/models.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11,7 +12,7 @@ import '../models/models.dart';
 //  Consider moving this to a .env file using flutter_dotenv before publishing.
 // ─────────────────────────────────────────────────────────────────────────────
 class AIConfig {
-  static const String geminiApiKey = 'AIzaSyCG-m6Z2YgeP_l76dBks2G9qX6LvXj4FiU';
+  static final String geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
   static const String geminiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
   static const Duration timeout = Duration(seconds: 15);
