@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "278000782008",
+    "project_id": "speakup-5cafa",
+    "storage_bucket": "speakup-5cafa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:278000782008:android:26747e3b637d95753a424d",
+        "android_client_info": {
+          "package_name": "com.example.speakup"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "278000782008-841g6mhicea46do9vlr2dqlmtl186aki.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.speakup",
+            "certificate_hash": "0c7e0a922a5700040fa38920d6a997c66c9d6351"
+          }
+        },
+        {
+          "client_id": "278000782008-ijsh6efn5sjksoep99v9m5p95n3as80g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCTnjt7UbBXMVfU00SwS5F8zf1rxKnUbcw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "278000782008-ijsh6efn5sjksoep99v9m5p95n3as80g.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

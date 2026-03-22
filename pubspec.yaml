@@ -1,0 +1,58 @@
+name: speakup_ai
+description: "SpeakUp - AI-powered English speaking practice app."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.10.3 <4.0.0'
+  flutter: '>=3.38.4'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^3.15.2
+  firebase_auth: ^5.7.0
+  cloud_firestore: ^5.6.12
+  google_sign_in: ^6.3.0
+
+  # State Management & Storage
+  provider: ^6.1.5
+  shared_preferences: ^2.5.4
+
+  # AI & Networking
+  http: ^1.6.0
+  speech_to_text: ^7.3.0
+  flutter_tts: ^4.2.5
+  uuid: ^4.3.3
+
+  # UI & Animations
+  google_fonts: ^6.3.3
+  flutter_animate: ^4.5.2
+  percent_indicator: ^4.2.5
+
+  # Services & Utilities
+  flutter_local_notifications: ^21.0.0
+  timezone: ^0.11.0
+  permission_handler: ^12.0.1
+  share_plus: ^12.0.1
+  url_launcher: ^6.3.1
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
