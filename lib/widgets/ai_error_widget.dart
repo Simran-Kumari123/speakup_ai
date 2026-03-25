@@ -13,9 +13,9 @@ class AIErrorWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.danger.withOpacity(0.1),
+        color: AppTheme.danger.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.danger.withOpacity(0.5)),
+        border: Border.all(color: AppTheme.danger.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
@@ -24,11 +24,11 @@ class AIErrorWidget extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13),
+              style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.bodyLarge?.color, fontSize: 13),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            icon: Icon(Icons.refresh_rounded, color: Theme.of(context).textTheme.bodyLarge?.color),
             onPressed: onRetry,
             tooltip: 'Try Again',
           )
