@@ -25,7 +25,7 @@ class GDService {
     ''';
 
     try {
-      final response = await AIFeedbackService.callGeminiRaw(prompt);
+      final response = await AIFeedbackService.callGeminiRaw(prompt, useJsonMode: false);
       final cleanJson = _extractJson(response);
       final data = jsonDecode(cleanJson);
       return (data['participants'] as List).map((p) => GDParticipant.fromJson(p)).toList();
@@ -78,7 +78,7 @@ class GDService {
     ''';
 
     try {
-      final response = await AIFeedbackService.callGeminiRaw(prompt);
+      final response = await AIFeedbackService.callGeminiRaw(prompt, useJsonMode: false);
       final cleanJson = _extractJson(response);
       final data = jsonDecode(cleanJson);
       return ChatMessage(
