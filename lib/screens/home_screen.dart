@@ -7,9 +7,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../services/app_state.dart';
 import '../theme/app_theme.dart';
-import '../models/models.dart';
+import '../widgets/app_widgets.dart';
 import 'chat_screen.dart';
 import 'interview_screen.dart';
+import 'speaking_screen.dart';
 import 'progress_screen.dart';
 import 'profile_screen.dart';
 import 'speaking_screen.dart';
@@ -26,7 +27,14 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _tab = 0;
+  int _tabIndex = 0;
+
+  final _screens = const [
+    _DashboardBody(),
+    ChatScreen(),
+    ProgressScreen(),
+    ProfileScreen(),
+  ];
 
   @override
   void initState() {
@@ -160,6 +168,13 @@ class _BottomNav extends StatelessWidget {
             }),
           ),
         ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: active ? AppTheme.primary : Colors.white38, size: 22),
+          if (active) ...[
+            const SizedBox(width: 6),
+            Text(label, style: GoogleFonts.dmSans(color: AppTheme.primary, fontWeight: FontWeight.w700, fontSize: 13)),
+          ],
+        ]),
       ),
     );
   }
@@ -172,7 +187,7 @@ class _Dashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
+    final state   = context.watch<AppState>();
     final profile = state.profile;
 
     return CustomScrollView(
@@ -330,8 +345,23 @@ class _Dashboard extends StatelessWidget {
                   _quickAction(context, '💬', 'AI Chat', AppTheme.accent, () => onTabChange(1)),
                 ],
               ),
-            ),
-          ),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Level ${profile.level}', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 4),
+                LinearProgressIndicator(
+                  value: (profile.totalXP % 200) / 200,
+                  backgroundColor: AppTheme.darkSurface,
+                  valueColor: const AlwaysStoppedAnimation(AppTheme.primary),
+                  borderRadius: BorderRadius.circular(4), minHeight: 6,
+                ),
+                const SizedBox(height: 4),
+                Text('${profile.totalXP} XP  •  ${profile.xpToNext} to next level',
+                  style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 11)),
+              ])),
+            ]),
+          ).animate().fadeIn(),
+          const SizedBox(height: 20),
 
           // 3.2 Daily Challenges Preview
           _sectionHeader('DAILY CHALLENGES'),
@@ -381,7 +411,8 @@ class _Dashboard extends StatelessWidget {
                 ),
               ),
             ),
-          ),
+          ).animate().fadeIn(delay: 100.ms),
+          const SizedBox(height: 24),
 
           // 4. Performance Header
           _sectionHeader('PERFORMANCE'),
@@ -439,6 +470,7 @@ class _Dashboard extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 24),
 
         const SliverToBoxAdapter(child: SizedBox(height: 40)),
       ],

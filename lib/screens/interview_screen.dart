@@ -32,10 +32,21 @@ class InterviewScreen extends StatefulWidget {
 }
 
 class _InterviewScreenState extends State<InterviewScreen> {
-  late QuestionService _questionService;
-  Question? _currentQuestion;
-  String? _selectedCategory;
-  String? _selectedDifficulty;
+  final _ctrl = TextEditingController();
+  final SpeechToText _speech = SpeechToText();
+  final FlutterTts _tts = FlutterTts();
+  final _questionService = QuestionService();
+  bool _speechReady = false;
+  bool _isListening = false;
+  bool _evaluating = false;
+  String _liveText = '';
+
+  // Filter
+  String _category = 'hr';
+  String _difficulty = 'beginner';
+  late List<dynamic> _questions;
+  int _currentQ = 0;
+  Map<String, dynamic>? _result;
 
   @override
   void initState() {
@@ -45,19 +56,22 @@ class _InterviewScreenState extends State<InterviewScreen> {
     _generateNewQuestion();
   }
 
-  void _generateNewQuestion() {
-    final question = _questionService.getRandomQuestion(
-      type: 'interview',
-      category: _selectedCategory,
-      difficulty: _selectedDifficulty,
-    );
-    setState(() {
-      _currentQuestion = question;
-    });
+  void _loadQuestions() {
+    _questions = _questionService.getQuestionsByCategory(_category)
+        .where((q) => q.difficulty == _difficulty)
+        .toList();
+    if (_questions.isEmpty) {
+      _questions = _questionService.getQuestionsByCategory(_category);
+    }
+    _currentQ = 0;
+    _result = null;
   }
 
-  List<String> _getCategories() {
-    return _questionService.getCategories(type: 'interview');
+  Future<void> _initSpeech() async {
+    _speechReady = await _speech.initialize(
+      onError: (_) => setState(() => _isListening = false),
+      onStatus: (s) { if (s == 'done' || s == 'notListening') _stopVoice(); },
+    );
   }
 
   @override
@@ -147,7 +161,6 @@ class _InterviewScreenState extends State<InterviewScreen> {
       ),
     );
   }
-}
 
 class _InterviewQuestionCard extends StatefulWidget {
   final Question q;
@@ -311,6 +324,15 @@ class _InterviewQuestionCardState extends State<_InterviewQuestionCard> {
     );
   }
 
+  Future<void> _stopVoice({bool send = false}) async {
+    await _speech.stop();
+    setState(() => _isListening = false);
+    if (send && _liveText.isNotEmpty) _submit(_liveText);
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); _speech.stop(); _tts.stop(); super.dispose(); }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -396,7 +418,33 @@ class _InterviewQuestionCardState extends State<_InterviewQuestionCard> {
                 ),
               ),
           ]),
-        ),
+        )),
+
+        // Input bar
+        if (_result == null && !_evaluating)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            decoration: const BoxDecoration(color: AppTheme.darkCard, border: Border(top: BorderSide(color: AppTheme.darkBorder))),
+            child: SafeArea(child: Row(children: [
+              GestureDetector(
+                onTap: () => _isListening ? _stopVoice(send: true) : _startVoice(),
+                child: Container(width: 44, height: 44,
+                  decoration: BoxDecoration(shape: BoxShape.circle,
+                    color: _isListening ? AppTheme.danger.withOpacity(0.15) : AppTheme.darkSurface,
+                    border: Border.all(color: _isListening ? AppTheme.danger : AppTheme.darkBorder)),
+                  child: Icon(_isListening ? Icons.stop : Icons.mic, color: _isListening ? AppTheme.danger : Colors.white54, size: 20)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: _ctrl, style: const TextStyle(color: Colors.white, fontSize: 14),
+                onSubmitted: (_) => _submit(),
+                decoration: InputDecoration(hintText: _isListening ? '🎤 Listening...' : 'Type your answer...', contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), isDense: true))),
+              const SizedBox(width: 8),
+              GestureDetector(onTap: () => _submit(),
+                child: Container(width: 44, height: 44,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [AppTheme.accent, AppTheme.primary])),
+                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 18))),
+            ])),
+          ),
       ]),
     );
   }
@@ -422,9 +470,21 @@ class _InterviewQuestionCardState extends State<_InterviewQuestionCard> {
   );
 }
 
-class _ResultCard extends StatelessWidget {
-  final Map<String, dynamic> result;
-  const _ResultCard({required this.result});
+  Widget _filterChip(String label, String cat) {
+    final selected = _category == cat;
+    return GestureDetector(
+      onTap: () => setState(() { _category = cat; _loadQuestions(); }),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.accent.withOpacity(0.12) : AppTheme.darkCard,
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: selected ? AppTheme.accent : AppTheme.darkBorder)),
+        child: Text(label, style: GoogleFonts.dmSans(color: selected ? AppTheme.accent : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

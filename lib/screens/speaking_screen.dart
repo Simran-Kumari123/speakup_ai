@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -78,25 +79,6 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
     _initTts();
   }
 
-  void _generateNewQuestion() {
-    final question = _questionService.getRandomQuestion(
-      type: 'speaking',
-      category: _selectedCategory,
-      difficulty: _selectedDifficulty,
-    );
-    setState(() {
-      _currentQuestion = question;
-      _spokenText = '';
-      _liveText = '';
-      _feedback = null;
-      _errorMessage = '';
-    });
-  }
-
-  List<String> _getCategories() {
-    return _questionService.getCategories(type: 'speaking');
-  }
-
   Future<void> _initSpeech() async {
     if (!kIsWeb) {
       final status = await Permission.microphone.status;
@@ -121,10 +103,10 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.48);
-    await _tts.setVolume(1.0);
-    await _tts.setPitch(1.0);
+    await _tts.setLanguage("en-US");
+    final state = context.read<AppState>();
+    final speed = {'slow': 0.35, 'normal': 0.5, 'fast': 0.65}[state.profile.voicePreference] ?? 0.5;
+    await _tts.setSpeechRate(speed);
   }
 
   Future<void> _startListening() async {
@@ -135,13 +117,15 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
     setState(() { _isListening = true; _liveText = ''; _spokenText = ''; _feedback = null; });
 
     await _speech.listen(
-      onResult: _onSpeechResult,
+      onResult: (r) {
+        setState(() => _recognizedText = r.recognizedWords);
+        if (r.finalResult && r.recognizedWords.isNotEmpty) {
+          _stopListening(autoSubmit: true);
+        }
+      },
       listenFor: const Duration(seconds: 60),
       pauseFor: const Duration(seconds: 4),
-      partialResults: true,
-      onSoundLevelChange: (level) => setState(() => _soundLevel = level),
-      localeId: 'en_US',
-      listenMode: ListenMode.confirmation,
+      partialResults: true, localeId: 'en_US',
     );
   }
 
@@ -168,12 +152,7 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
     }
   }
 
-  Future<void> _processVoice() async {
-    setState(() => _errorMessage = '');
     try {
-      final fb = await AIFeedbackService.respondToSpeech(
-          userText: _spokenText, context: 'pronunciation');
-      if (!mounted) return;
       final state = context.read<AppState>();
       state.addXP(fb.xp);
       state.addWordsSpoken(_spokenText.split(' ').length);
@@ -414,7 +393,20 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
                       size: 40,
                     ),
                   ),
-                ),
+                ]),
+              ]),
+            ),
+          const SizedBox(height: 24),
+
+          // Record button
+          Center(child: GestureDetector(
+            onTap: () => _isListening ? _stopListening(autoSubmit: true) : _startListening(),
+            child: Container(
+              width: 100, height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _isListening ? AppTheme.danger.withOpacity(0.15) : AppTheme.primary.withOpacity(0.12),
+                border: Border.all(color: _isListening ? AppTheme.danger : AppTheme.primary, width: 3),
               ),
             ).animate(target: _processing ? 1 : 0).custom(duration: 2000.ms, builder: (context, value, child) => RotationTransition(turns: AlwaysStoppedAnimation(value), child: child)),
 

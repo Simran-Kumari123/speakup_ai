@@ -7,9 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/models.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  CONFIG
-//  ⚠️ SECURITY WARNING: Do not push this key to GitHub!
-//  Consider moving this to a .env file using flutter_dotenv before publishing.
+//  CONFIG — API key loaded from .env file
 // ─────────────────────────────────────────────────────────────────────────────
 class AIConfig {
   static String get geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
@@ -30,15 +28,24 @@ enum AIErrorType { noInternet, timeout, apiError, invalidKey, rateLimited, unkno
 
 class AIFeedbackService {
 
+  // ── Personality modes ───────────────────────────────────────────────────────
+  static const Map<String, String> personalityDescriptions = {
+    'friendly': 'a friendly, encouraging English coach who motivates the student',
+    'strict': 'a strict, demanding interviewer who pushes for perfection',
+    'hr': 'a professional HR manager conducting a formal interview',
+    'debate': 'a debate partner who challenges arguments and pushes critical thinking',
+  };
+
   // ── Public: Chat / Speaking feedback ─────────────────────────────────────
   static Future<ChatMessage> respondToSpeech({
     required String userText,
     required String context,
+    String personalityMode = 'friendly',
   }) async {
     try {
       final result = await _callGemini(
         _buildSpeechPrompt(userText),
-        systemPersona: _getSpeechPersona(context),
+        systemPersona: _getSpeechPersona(context, personalityMode),
       );
       return _parseSpeechResponse(result, userText);
     } on AIException catch (e) {
@@ -52,11 +59,12 @@ class AIFeedbackService {
   static Future<Map<String, dynamic>> evaluateAnswer({
     required String question,
     required String answer,
+    String personalityMode = 'friendly',
   }) async {
     try {
       final result = await _callGemini(
         _buildInterviewPrompt(question, answer),
-        systemPersona: _getInterviewPersona(),
+        systemPersona: _getInterviewPersona(personalityMode),
       );
       return _parseInterviewResponse(result);
     } on AIException catch (e) {
@@ -94,7 +102,7 @@ class AIFeedbackService {
     if (AIConfig.geminiApiKey == 'YOUR_GEMINI_API_KEY_HERE' ||
         AIConfig.geminiApiKey.isEmpty) {
       throw AIException(
-        'Gemini API key not set.',
+        'Gemini API key not set. Check your .env file.',
         AIErrorType.invalidKey,
       );
     }
@@ -133,18 +141,47 @@ class AIFeedbackService {
 
     final body = jsonEncode(bodyMap);
 
-    try {
-      final response = await http
-          .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
-          .timeout(AIConfig.timeout);
+    // Exponential Backoff with Jitter for Rate Limiting
+    for (int attempt = 0; attempt <= AIConfig.maxRetries; attempt++) {
+      try {
+        final response = await http
+            .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
+            .timeout(AIConfig.timeout);
 
-      return _handleHttpResponse(response);
+        if (response.statusCode == 429 && attempt < AIConfig.maxRetries) {
+          // 429 Too Many Requests -> Exponential backoff: 2s, 4s, 8s + random jitter
+          final delayMs = AIConfig.retryDelay.inMilliseconds * (1 << attempt);
+          final jitter = DateTime.now().millisecond % 500; // Add 0-499ms jitter
+          await Future.delayed(Duration(milliseconds: delayMs + jitter));
+          continue;
+        }
 
-    } on TimeoutException {
-      throw AIException('The request timed out.', AIErrorType.timeout);
-    } on SocketException {
-      throw AIException('No internet connection.', AIErrorType.noInternet);
+        return _handleHttpResponse(response);
+
+      } on TimeoutException {
+        if (attempt < AIConfig.maxRetries) {
+          final delayMs = AIConfig.retryDelay.inMilliseconds * (1 << attempt);
+          await Future.delayed(Duration(milliseconds: delayMs));
+          continue;
+        }
+        throw AIException('The request timed out.', AIErrorType.timeout);
+      } catch (e) {
+        if (e is AIException) {
+          if (e.type == AIErrorType.rateLimited && attempt < AIConfig.maxRetries) {
+            final delayMs = AIConfig.retryDelay.inMilliseconds * (1 << attempt);
+            await Future.delayed(Duration(milliseconds: delayMs));
+            continue;
+          }
+          rethrow;
+        }
+        final msg = e.toString().toLowerCase();
+        if (msg.contains('socket') || msg.contains('connection') || msg.contains('network')) {
+          throw AIException('No internet connection.', AIErrorType.noInternet);
+        }
+        throw AIException('Network error: $e', AIErrorType.apiError);
+      }
     }
+    throw AIException('Too many requests. Please wait and try again.', AIErrorType.rateLimited);
   }
 
   // ── Handle HTTP Response ──────────────────────────────────────────────────
@@ -187,15 +224,17 @@ class AIFeedbackService {
 
   // ── Prompt Builders & Personas ─────────────────────────────────────────────
 
-  static String _getSpeechPersona(String context) {
+  static String _getSpeechPersona(String context, [String personalityMode = 'friendly']) {
     final contextDesc = {
       'chat':          'casual English conversation practice',
       'pronunciation': 'spoken English fluency and pronunciation practice',
       'interview':     'job interview preparation',
     }[context] ?? 'English practice';
 
+    final personality = personalityDescriptions[personalityMode] ?? personalityDescriptions['friendly']!;
+
     return '''
-You are an expert English language coach helping a student prepare for job placements and improve spoken English during $contextDesc.
+You are $personality helping a student prepare for job placements and improve spoken English during $contextDesc.
 Respond using this EXACT JSON schema:
 {
   "feedback": "string",
@@ -209,9 +248,10 @@ Respond using this EXACT JSON schema:
 
   static String _buildSpeechPrompt(String userText) => 'The student said: "$userText"';
 
-  static String _getInterviewPersona() {
+  static String _getInterviewPersona([String personalityMode = 'friendly']) {
+    final personality = personalityDescriptions[personalityMode] ?? personalityDescriptions['friendly']!;
     return '''
-You are an expert placement officer and interview coach evaluating a student's interview answer.
+You are $personality evaluating a student's interview answer.
 Respond using this EXACT JSON schema:
 {
   "score": number,
