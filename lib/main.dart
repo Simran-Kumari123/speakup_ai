@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/app_state.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
@@ -16,12 +17,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load environment variables
-  try {
-    await dotenv.load(fileName: '.env');
-    debugPrint('✅ .env loaded');
-  } catch (e) {
-    debugPrint('⚠️ .env not found, using fallback: $e');
-  }
+  await dotenv.load(fileName: ".env");
 
   // 1. Lock to portrait (Mobile only)
   if (!kIsWeb) {
