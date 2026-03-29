@@ -7,6 +7,7 @@ import '../services/app_state.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'onboarding_screen.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -122,48 +123,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
           ],
 
-          // Notifications
-          _section('Notifications'),
-          _toggleRow('Daily Practice Reminder', state.notificationsOn, state.toggleNotifications),
-          _tileRow(Icons.access_time_outlined, 'Reminder Time', state.reminderTime, () async {
-            final t = await showTimePicker(
-              context: context,
-              initialTime: TimeOfDay.now(),
-              builder: (ctx, child) => Theme(
-                data: ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: AppTheme.primary,
-                    surface: AppTheme.darkCard,
-                    onSurface: Colors.white,
-                  ),
-                  timePickerTheme: const TimePickerThemeData(
-                    backgroundColor: AppTheme.darkCard,
-                  ),
-                ),
-                child: child!,
-              ),
-            );
-            if (t != null && mounted) {
-              state.setReminderTime(
-                  '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: const Text('Reminder set ✅'),
-                backgroundColor: AppTheme.primary,
-                behavior: SnackBarBehavior.floating,
-              ));
-            }
-          }),
+          // History snapshot
+          _section('Activity History'),
+          _tileRow(Icons.chat_bubble_outline, 'Chat Sessions', '${state.chatMessages.length} messages', () {}),
+          _tileRow(Icons.work_history_outlined, 'Interview Sessions', '${state.interviewSessions.length} sessions', () {}),
+          _tileRow(Icons.book_outlined, 'Vocabulary', '${state.vocabulary.length} words', () {}),
+          _tileRow(Icons.quiz_outlined, 'Quiz History', '${state.quizHistory.length} quizzes', () {}),
+
+          const SizedBox(height: 20),
+
+          // Settings link
+          _section('App Settings'),
+          _tileRow(Icons.settings_outlined, 'Settings', 'AI personality, difficulty, language', () =>
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
 
           const SizedBox(height: 20),
 
           // Help
           _section('Help & Info'),
-          _tileRow(Icons.help_outline,          'How to Use SpeakUp', '', () => _showHelp(context)),
-
+          _tileRow(Icons.help_outline,          'How to Use', '', () => _showHelp(context)),
           _tileRow(Icons.star_outline,          'Rate the App',        '', () => _rateApp()),
-
           _tileRow(Icons.share_outlined,        'Share with Friends',  '', () => _shareApp()),
-
           _tileRow(Icons.privacy_tip_outlined,  'Privacy Policy',      '', () => _openPrivacyPolicy()),
 
           const SizedBox(height: 20),
@@ -183,7 +163,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
 
           const SizedBox(height: 12),
-          Center(child: Text('SpeakUp v2.0 — English & Interview Prep',
+          Center(child: Text('AI Chat Coach v3.0 — English & Interview Prep',
               style: GoogleFonts.dmSans(color: Colors.white24, fontSize: 11))),
           const SizedBox(height: 24),
         ]),
@@ -236,20 +216,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ]),
   );
 
-  Widget _toggleRow(String label, bool value, void Function(bool) onChanged) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-    decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.darkBorder)),
-    child: Row(children: [
-      const Icon(Icons.notifications_outlined, color: AppTheme.primary, size: 18),
-      const SizedBox(width: 12),
-      Text(label, style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13)),
-      const Spacer(),
-      Switch(value: value, onChanged: onChanged, activeColor: AppTheme.primary),
-    ]),
-  );
-
   Widget _tileRow(IconData icon, String label, String trailing, VoidCallback onTap) => Container(
     margin: const EdgeInsets.only(bottom: 8),
     decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(12),
@@ -280,11 +246,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _shareApp() {
     Share.share(
-      '🎤 I\'m using SpeakUp to prepare for placement interviews with AI coaching!\n\n'
-          '✅ Mock interviews\n'
-          '✅ Real-time feedback\n\n'
+      '🎤 I\'m using AI Chat Coach to improve my English and prepare for placements!\\n\\n'
+          '✅ Mock interviews with AI\\n'
+          '✅ Vocabulary builder\\n'
+          '✅ Real-time feedback\\n\\n'
           '📲 Download free: https://play.google.com/store/apps/details?id=com.speakup.ai',
-      subject: 'SpeakUp — Interview Prep App',
+      subject: 'AI Chat Coach — English & Interview Prep App',
     );
   }
 
@@ -337,13 +304,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context: ctx,
     builder: (_) => AlertDialog(
       backgroundColor: AppTheme.darkCard,
-      title: Text('How to Use SpeakUp', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700)),
+      title: Text('How to Use AI Chat Coach', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700)),
       content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _helpItem('🏠', 'Home',      'Dashboard with your progress, stats and quick access to practice'),
-        _helpItem('💬', 'Chat',      'AI chat coach — type or speak, get instant grammar & fluency feedback'),
-        _helpItem('💼', 'Interview', 'Practice real interview questions with AI scoring'),
-        _helpItem('🎤', 'Speaking',  'Record yourself speaking on prompts, get pronunciation feedback'),
-        _helpItem('📈', 'Progress',  'Track XP, streaks, badges and topic progress'),
+        _helpItem('🏠', 'Home',        'Dashboard with your progress, stats and all practice modules'),
+        _helpItem('💬', 'Chat',        'AI chat coach — type or speak, get grammar & fluency feedback'),
+        _helpItem('💼', 'Interview',   'Practice real interview questions with AI scoring & ideal answers'),
+        _helpItem('🎤', 'Speaking',    'Record yourself speaking, get pronunciation & WPM feedback'),
+        _helpItem('🎭', 'Scenarios',   'Guided practice modules for self-intro, workplace, travel'),
+        _helpItem('🎯', 'Mock Int.',   'Upload resume for personalized interview questions'),
+        _helpItem('📖', 'Vocabulary',  'Daily word challenges with AI usage evaluation'),
+        _helpItem('🧠', 'Quiz',        'MCQ & fill-blank quizzes with timer'),
+        _helpItem('🗣️', 'GD Sim',     'Group discussion practice with AI evaluation'),
+        _helpItem('📈', 'Progress',    'Track XP, streaks, badges, accuracy and weak areas'),
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx),
           child: const Text('Got it!', style: TextStyle(color: AppTheme.primary)))],
@@ -373,7 +345,7 @@ class _PrivacyPolicyScreen extends StatelessWidget {
     },
     {
       'title': '2. AI & Gemini API',
-      'body': 'SpeakUp uses Google\'s Gemini API to generate feedback.\n• Your answer text is sent to Gemini for analysis\n• We do not store raw answers on our servers',
+      'body': 'AI Chat Coach uses Google\'s Gemini API to generate feedback.\n• Your answer text is sent to Gemini for analysis\n• We do not store raw answers on our servers',
     },
     {
       'title': '3. Data Storage',

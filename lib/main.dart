@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'services/app_state.dart';
 import 'services/notification_service.dart';
@@ -13,6 +14,14 @@ import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
+  try {
+    await dotenv.load(fileName: '.env');
+    debugPrint('✅ .env loaded');
+  } catch (e) {
+    debugPrint('⚠️ .env not found, using fallback: $e');
+  }
 
   // 1. Lock to portrait (Mobile only)
   if (!kIsWeb) {
@@ -82,7 +91,7 @@ class SpeakUpApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SpeakUp',
+      title: 'AI Chat Coach',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       // Decides initial screen based on Firebase Auth state
@@ -131,7 +140,7 @@ class _SplashScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'SpeakUp',
+              'AI Chat Coach',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 28,

@@ -5,6 +5,7 @@ import 'package:percent_indicator/percent_indicator.dart';
 import '../services/app_state.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
+import 'weak_areas_screen.dart';
 
 class ProgressScreen extends StatelessWidget {
   const ProgressScreen({super.key});
@@ -42,7 +43,7 @@ class ProgressScreen extends StatelessWidget {
               ),
               const SizedBox(width: 20),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${profile.name}', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                Text(profile.name.isNotEmpty ? profile.name : 'Learner', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
                 Text(profile.targetRole, style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 12)),
                 const SizedBox(height: 10),
                 Text('${profile.totalXP} XP total', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
@@ -62,7 +63,7 @@ class ProgressScreen extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          // Stats
+          // Stats Grid
           Text('Your Stats', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 12),
           GridView.count(
@@ -73,12 +74,40 @@ class ProgressScreen extends StatelessWidget {
               _stat('📚', 'Sessions',        '${profile.sessionsCompleted}', 'done',    AppTheme.secondary),
               _stat('⏱️', 'Practice Time',   '${profile.practiceMinutes}',  'minutes', AppTheme.accent),
               _stat('🔤', 'Words Spoken',    '${profile.wordsSpoken}',       'words',   AppTheme.primary),
+              _stat('📖', 'Words Learned',   '${profile.wordsLearned}',     'words',   Colors.teal),
+              _stat('🧠', 'Quizzes Done',    '${profile.quizzesCompleted}', 'done',    Colors.purple),
             ],
           ),
 
           const SizedBox(height: 24),
 
-          // Weekly activity
+          // Accuracy
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.darkBorder)),
+            child: Row(children: [
+              const Text('🎯', style: TextStyle(fontSize: 24)),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Overall Accuracy', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 6),
+                LinearProgressIndicator(
+                  value: (profile.accuracy / 100).clamp(0.0, 1.0),
+                  backgroundColor: AppTheme.darkSurface,
+                  valueColor: AlwaysStoppedAnimation(profile.accuracy >= 80 ? AppTheme.primary : profile.accuracy >= 60 ? AppTheme.accent : AppTheme.danger),
+                  borderRadius: BorderRadius.circular(4), minHeight: 8,
+                ),
+              ])),
+              const SizedBox(width: 14),
+              Text('${profile.accuracy.toStringAsFixed(1)}%',
+                style: GoogleFonts.dmSans(color: profile.accuracy >= 80 ? AppTheme.primary : profile.accuracy >= 60 ? AppTheme.accent : AppTheme.danger,
+                  fontWeight: FontWeight.w800, fontSize: 18)),
+            ]),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Weekly Activity
           Text('This Week', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 12),
           Container(
@@ -90,20 +119,43 @@ class ProgressScreen extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _bar('M', 0.6, false), _bar('T', 0.8, false), _bar('W', 1.0, false),
-                _bar('T', 0.4, false), _bar('F', 0.7, false), _bar('S', 0.3, false),
-                _bar('S', 0.5, true),
-              ],
+              children: List.generate(7, (i) {
+                final maxXP = profile.weeklyXP.reduce((a, b) => a > b ? a : b);
+                final h = maxXP > 0 ? profile.weeklyXP[i] / maxXP : 0.0;
+                final today = DateTime.now().weekday - 1 == i;
+                return _bar(['M', 'T', 'W', 'T', 'F', 'S', 'S'][i], h, today, profile.weeklyXP[i]);
+              }),
             ),
           ),
 
           const SizedBox(height: 24),
 
-          // Topic progress
+          // Weak areas link
+          if (state.weakAreas.isNotEmpty) ...[
+            GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WeakAreasScreen())),
+              child: Container(
+                width: double.infinity, padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: AppTheme.danger.withOpacity(0.06), borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.danger.withOpacity(0.2))),
+                child: Row(children: [
+                  const Text('⚠️', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${state.weakAreas.length} weak areas detected', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text('Tap to see recommendations', style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 11)),
+                  ])),
+                  const Icon(Icons.arrow_forward_ios, color: AppTheme.danger, size: 14),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // Topic Progress
           Text('Topic Progress', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 12),
-          ...kPracticeTopics.map((t) => _topicRow(t)).toList(),
+          ...kPracticeTopics.map((t) => _topicRow(t)),
 
           const SizedBox(height: 24),
 
@@ -111,12 +163,18 @@ class ProgressScreen extends StatelessWidget {
           Text('Badges', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 12),
           Wrap(spacing: 12, runSpacing: 12, children: [
-            _badge('🌟', 'First Session',  profile.sessionsCompleted >= 1),
-            _badge('🔥', '3-Day Streak',   profile.streakDays >= 3),
-            _badge('🥉', '100 XP',         profile.totalXP >= 100),
-            _badge('🥈', '500 XP',         profile.totalXP >= 500),
-            _badge('🎯', '5 Sessions',     profile.sessionsCompleted >= 5),
-            _badge('🏆', 'Interview Pro',  profile.sessionsCompleted >= 10),
+            _badge('🌟', 'First Session',    profile.sessionsCompleted >= 1),
+            _badge('🔥', '3-Day Streak',     profile.streakDays >= 3),
+            _badge('🔥', '7-Day Streak',     profile.streakDays >= 7),
+            _badge('🥉', '100 XP',           profile.totalXP >= 100),
+            _badge('🥈', '500 XP',           profile.totalXP >= 500),
+            _badge('🥇', '1000 XP',          profile.totalXP >= 1000),
+            _badge('💎', '2000 XP',          profile.totalXP >= 2000),
+            _badge('🎯', '5 Sessions',       profile.sessionsCompleted >= 5),
+            _badge('🏆', '10 Sessions',      profile.sessionsCompleted >= 10),
+            _badge('📚', '10 Words',         profile.wordsLearned >= 10),
+            _badge('🧠', 'Quiz Master',      profile.quizzesCompleted >= 5),
+            _badge('⚡', 'Challenge Week',   profile.challengeStreak >= 7),
           ]),
 
           const SizedBox(height: 24),
@@ -136,13 +194,15 @@ class ProgressScreen extends StatelessWidget {
           Text(emoji, style: const TextStyle(fontSize: 20)),
           const Spacer(),
           Text(value, style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w800, fontSize: 22)),
-          Text('$label', style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 11)),
+          Text(label, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 11)),
         ]),
       );
 
-  Widget _bar(String day, double h, bool isToday) => Column(mainAxisSize: MainAxisSize.min, children: [
+  Widget _bar(String day, double h, bool isToday, int xp) => Column(mainAxisSize: MainAxisSize.min, children: [
+    if (xp > 0) Text('$xp', style: GoogleFonts.dmSans(fontSize: 8, color: Colors.white24)),
+    const SizedBox(height: 2),
     Container(
-      width: 26, height: (60 * h).clamp(4, 60),
+      width: 26, height: (60 * h).clamp(4.0, 60.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
         color: isToday ? AppTheme.primary : AppTheme.primary.withOpacity(0.35),
