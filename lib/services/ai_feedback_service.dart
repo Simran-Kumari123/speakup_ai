@@ -15,8 +15,8 @@ class AIConfig {
   static const String geminiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
   static const Duration timeout = Duration(seconds: 30);
-  static const int maxRetries = 2;
-  static const Duration retryDelay = Duration(seconds: 2);
+  static const int maxRetries = 3;
+  static const Duration retryDelay = Duration(seconds: 4);
 }
 
 class AIException implements Exception {
@@ -487,7 +487,7 @@ Respond with this EXACT JSON:
 
     final body = jsonEncode(bodyMap);
 
-    // Retry loop for rate limiting
+    // Exponential Backoff with Jitter for Rate Limiting
     for (int attempt = 0; attempt <= AIConfig.maxRetries; attempt++) {
       try {
         final response = await http
@@ -495,8 +495,10 @@ Respond with this EXACT JSON:
             .timeout(AIConfig.timeout);
 
         if (response.statusCode == 429 && attempt < AIConfig.maxRetries) {
-          // Rate limited – wait and retry
-          await Future.delayed(AIConfig.retryDelay * (attempt + 1));
+          // 429 Too Many Requests -> Exponential backoff: 2s, 4s, 8s + random jitter
+          final delayMs = AIConfig.retryDelay.inMilliseconds * (1 << attempt);
+          final jitter = DateTime.now().millisecond % 500; // Add 0-499ms jitter
+          await Future.delayed(Duration(milliseconds: delayMs + jitter));
           continue;
         }
 
@@ -504,14 +506,16 @@ Respond with this EXACT JSON:
 
       } on TimeoutException {
         if (attempt < AIConfig.maxRetries) {
-          await Future.delayed(AIConfig.retryDelay);
+          final delayMs = AIConfig.retryDelay.inMilliseconds * (1 << attempt);
+          await Future.delayed(Duration(milliseconds: delayMs));
           continue;
         }
         throw AIException('The request timed out.', AIErrorType.timeout);
       } catch (e) {
         if (e is AIException) {
           if (e.type == AIErrorType.rateLimited && attempt < AIConfig.maxRetries) {
-            await Future.delayed(AIConfig.retryDelay * (attempt + 1));
+            final delayMs = AIConfig.retryDelay.inMilliseconds * (1 << attempt);
+            await Future.delayed(Duration(milliseconds: delayMs));
             continue;
           }
           rethrow;

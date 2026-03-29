@@ -9,7 +9,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 class PdfQaService {
   static const Duration _timeout = Duration(seconds: 30);
   static const String _geminiBaseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
   /// Extract text from PDF bytes (works cross-platform)
   static String extractTextFromBytes(Uint8List bytes) {
@@ -78,31 +78,58 @@ $truncated
       },
     });
 
-    try {
-      final response = await http
-          .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
-          .timeout(_timeout);
+    int maxRetries = 3;
+    Duration baseDelay = const Duration(seconds: 4);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final rawText =
-            data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '[]';
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        final response = await http
+            .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
+            .timeout(_timeout);
 
-        final List<dynamic> qaList = jsonDecode(rawText);
-        return qaList.map<Map<String, String>>((item) {
-          return {
-            'question': (item['question'] ?? '').toString(),
-            'answer': (item['answer'] ?? '').toString(),
-          };
-        }).toList();
+        if (response.statusCode == 429 && attempt < maxRetries) {
+          final delayMs = baseDelay.inMilliseconds * (1 << attempt);
+          final jitter = DateTime.now().millisecond % 500;
+          await Future.delayed(Duration(milliseconds: delayMs + jitter));
+          continue;
+        }
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final rawText =
+              data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '[]';
+
+          final List<dynamic> qaList = jsonDecode(rawText);
+          return qaList.map<Map<String, String>>((item) {
+            return {
+              'question': (item['question'] ?? '').toString(),
+              'answer': (item['answer'] ?? '').toString(),
+            };
+          }).toList();
+        }
+
+        if (attempt == maxRetries) {
+          throw Exception('Gemini API error: ${response.statusCode}');
+        }
+      } on TimeoutException {
+        if (attempt < maxRetries) {
+          final delayMs = baseDelay.inMilliseconds * (1 << attempt);
+          await Future.delayed(Duration(milliseconds: delayMs));
+          continue;
+        }
+        throw Exception('Request timed out. The PDF might be too large.');
+      } catch (e) {
+        if (e is Exception && e.toString().contains('Exception:') && !e.toString().contains('Too Many Requests') && !e.toString().contains('Network')) {
+            rethrow;
+        }
+        if (attempt < maxRetries) {
+          final delayMs = baseDelay.inMilliseconds * (1 << attempt);
+          await Future.delayed(Duration(milliseconds: delayMs));
+          continue;
+        }
+        throw Exception('Network error: $e');
       }
-
-      throw Exception('Gemini API error: ${response.statusCode}');
-    } on TimeoutException {
-      throw Exception('Request timed out. The PDF might be too large.');
-    } catch (e) {
-      if (e is Exception && e.toString().contains('Exception:')) rethrow;
-      throw Exception('Network error: $e');
     }
+    throw Exception('Failed to generate Q&A');
   }
 }

@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 class TranslationService {
   static const Duration _timeout = Duration(seconds: 12);
   static const String _geminiBaseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
   /// Supported languages with display name + flag
   static const Map<String, Map<String, String>> supportedLanguages = {
@@ -64,25 +64,51 @@ class TranslationService {
       },
     });
 
-    try {
-      final response = await http
-          .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
-          .timeout(_timeout);
+    int maxRetries = 3;
+    Duration baseDelay = const Duration(seconds: 4);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final translated =
-            data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
-        return {
-          'original': text,
-          'translated': translated.toString().trim(),
-        };
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        final response = await http
+            .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
+            .timeout(_timeout);
+
+        if (response.statusCode == 429 && attempt < maxRetries) {
+          final delayMs = baseDelay.inMilliseconds * (1 << attempt);
+          final jitter = DateTime.now().millisecond % 500;
+          await Future.delayed(Duration(milliseconds: delayMs + jitter));
+          continue;
+        }
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final translated =
+              data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
+          return {
+            'original': text,
+            'translated': translated.toString().trim(),
+          };
+        }
+        
+        if (attempt == maxRetries) {
+          return {'original': text, 'translated': '[Translation failed: ${response.statusCode}]'};
+        }
+      } on TimeoutException {
+        if (attempt < maxRetries) {
+          final delayMs = baseDelay.inMilliseconds * (1 << attempt);
+          await Future.delayed(Duration(milliseconds: delayMs));
+          continue;
+        }
+        return {'original': text, 'translated': '[Translation timed out]'};
+      } catch (e) {
+        if (attempt < maxRetries) {
+          final delayMs = baseDelay.inMilliseconds * (1 << attempt);
+          await Future.delayed(Duration(milliseconds: delayMs));
+          continue;
+        }
+        return {'original': text, 'translated': '[Translation error: $e]'};
       }
-      return {'original': text, 'translated': '[Translation failed: ${response.statusCode}]'};
-    } on TimeoutException {
-      return {'original': text, 'translated': '[Translation timed out]'};
-    } catch (e) {
-      return {'original': text, 'translated': '[Translation error: $e]'};
     }
+    return {'original': text, 'translated': '[Translation failed globally]'};
   }
 }
