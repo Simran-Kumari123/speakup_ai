@@ -74,6 +74,7 @@ static Future<void> scheduleDailyReminder({
 required int hour,
 required int minute,
 required String userName,
+bool skipToday = false,
 }) async {
 await cancelDailyReminder();
 
@@ -91,20 +92,48 @@ await _plugin.zonedSchedule(
 id: 0,
 title: '⏰ SpeakUp Reminder',
 body: msg,
-scheduledDate: _nextInstanceOfTime(hour, minute),
+scheduledDate: _nextInstanceOfTime(hour, minute, skipToday),
 notificationDetails: _details,
 androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
 matchDateTimeComponents: DateTimeComponents.time,
 payload: 'daily_reminder',
 );
 
-debugPrint(
-'✅ Daily reminder set at $hour:${minute.toString().padLeft(2, "0")}');
+debugPrint('✅ Daily reminder set at $hour:$minute (skipToday: $skipToday)');
 }
 
-// ── Cancel Daily Reminder ──────────────────────────────────────────────────
+// ── Cancel Reminders ───────────────────────────────────────────────────────
 static Future<void> cancelDailyReminder() async {
 await _plugin.cancel(id: 0);
+}
+
+static Future<void> cancelTestReminder() async {
+await _plugin.cancel(id: 10);
+}
+
+static Future<void> cancelAll() async {
+await _plugin.cancelAll();
+}
+
+// ── Weekly Test Reminder ──────────────────────────────────────────────────
+static Future<void> scheduleWeeklyTestReminder({
+required int hour,
+required int minute,
+}) async {
+await cancelTestReminder();
+
+await _plugin.zonedSchedule(
+id: 10,
+title: '📝 Sunday Test Reminder',
+body: 'It\'s Sunday! Time to test your progress and reach new heights. 🚀',
+scheduledDate: _nextInstanceOfWeekday(DateTime.sunday, hour, minute),
+notificationDetails: _details,
+androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+payload: 'test_reminder',
+);
+
+debugPrint('✅ Weekly Test reminder set for Sunday at $hour:$minute');
 }
 
 // ── Instant Notification ───────────────────────────────────────────────────
@@ -162,14 +191,21 @@ static Future<List<PendingNotificationRequest>> getPending() async {
 return await _plugin.pendingNotificationRequests();
 }
 
-// ── Helper ────────────────────────────────────────────────────────────────
-static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
+static tz.TZDateTime _nextInstanceOfWeekday(int day, int hour, int minute) {
+tz.TZDateTime scheduledDate = _nextInstanceOfTime(hour, minute);
+while (scheduledDate.weekday != day) {
+scheduledDate = scheduledDate.add(const Duration(days: 1));
+}
+return scheduledDate;
+}
+
+static tz.TZDateTime _nextInstanceOfTime(int hour, int minute, [bool skipToday = false]) {
 final now = tz.TZDateTime.now(tz.local);
 
 var scheduled =
 tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
 
-if (scheduled.isBefore(now)) {
+if (skipToday || scheduled.isBefore(now)) {
 scheduled = scheduled.add(const Duration(days: 1));
 }
 

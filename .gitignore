@@ -48,3 +48,9 @@ app.*.map.json
 # Environment variables
 .env
 .env.*
+
+# Keystores & Properties
+android/keystore_backup/
+*.jks
+*.keystore
+key.properties

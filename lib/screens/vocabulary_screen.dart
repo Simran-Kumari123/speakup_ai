@@ -1,14 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:uuid/uuid.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../models/models.dart';
+import 'dart:ui';
 import '../services/app_state.dart';
 import '../services/ai_feedback_service.dart';
+import '../services/speech_service.dart';
 import '../theme/app_theme.dart';
+import '../models/models.dart';
+import '../l10n/app_localizations.dart';
 
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({super.key});
@@ -17,100 +19,132 @@ class VocabularyScreen extends StatefulWidget {
 }
 
 class _VocabularyScreenState extends State<VocabularyScreen> {
-  bool _loading = false;
-  VocabularyWord? _currentWord;
   bool _showDetails = false;
-
-  // Practice
-  final _practiceCtrl = TextEditingController();
-  final SpeechToText _speech = SpeechToText();
-  final FlutterTts _tts = FlutterTts();
-  bool _speechReady = false;
+  final TextEditingController _practiceCtrl = TextEditingController();
+  final FlutterTts _tts = AppState.tts;
   bool _isListening = false;
   String _liveText = '';
   bool _evaluating = false;
   Map<String, dynamic>? _evalResult;
+  bool _isSpeaking = false;
 
   @override
   void initState() {
     super.initState();
     _initSpeech();
     _initTts();
-    _loadDailyWord();
   }
 
   Future<void> _initSpeech() async {
-    _speechReady = await _speech.initialize(
+    final speechService = context.read<SpeechService>();
+    await speechService.init(
       onError: (_) => setState(() => _isListening = false),
       onStatus: (s) { if (s == 'done' || s == 'notListening') _stopVoice(); },
     );
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
-    await _tts.setSpeechRate(0.45);
-  }
-
-  Future<void> _loadDailyWord() async {
-    setState(() { _loading = true; _showDetails = false; _evalResult = null; });
-    try {
-      final data = await AIFeedbackService.generateDailyWord();
-      if (!mounted) return;
-      final word = VocabularyWord(
-        id: const Uuid().v4(),
-        word: data['word'] ?? 'articulate',
-        meaning: data['meaning'] ?? '',
-        partOfSpeech: data['partOfSpeech'] ?? '',
-        synonyms: List<String>.from(data['synonyms'] ?? []),
-        antonyms: List<String>.from(data['antonyms'] ?? []),
-        example: data['example'] ?? '',
-        pronunciation: data['pronunciation'] ?? '',
-      );
-      final state = context.read<AppState>();
-      state.addVocabWord(word);
-      setState(() { _currentWord = word; _loading = false; });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
+    final state = context.read<AppState>();
+    await AppState.configureTts(_tts, state);
   }
 
   Future<void> _evaluateUsage() async {
+    final state = context.read<AppState>();
+    final wordObj = state.wordOfTheDay;
     final sentence = _practiceCtrl.text.trim();
-    if (sentence.isEmpty || _currentWord == null) return;
+    if (sentence.isEmpty) return;
+    
     setState(() { _evaluating = true; _evalResult = null; });
     try {
-      final result = await AIFeedbackService.evaluateVocabUsage(word: _currentWord!.word, userSentence: sentence);
+      final result = await AIFeedbackService.evaluateVocabUsage(word: wordObj.word, example: sentence);
       if (!mounted) return;
-      final state = context.read<AppState>();
+      
       state.addXP((result['xp'] as num).toInt());
-      if (result['correct'] == true) {
-        state.markVocabLearned(_currentWord!.id);
+      if (result['isCorrect'] == true) {
+        state.markVocabLearned(wordObj.id);
       }
-      setState(() { _evalResult = result; _evaluating = false; });
+      
+      if (mounted) {
+        setState(() { 
+          _evalResult = result; 
+          _evaluating = false; 
+        });
+      }
+      
+      // Feedback Audio Tip
+      if (result['isCorrect'] == true) {
+        _speakSafe("Perfectly used!");
+      }
     } catch (_) {
-      setState(() => _evaluating = false);
+      if (mounted) setState(() => _evaluating = false);
+    }
+  }
+
+  Future<void> _speakSafe(String text) async {
+    if (!mounted || _isSpeaking) return;
+    try {
+      _isSpeaking = true;
+      await _tts.speak(text);
+      _isSpeaking = false;
+    } catch (_) {
+      _isSpeaking = false;
     }
   }
 
   Future<void> _startVoice() async {
-    if (!_speechReady) return;
+    final speechService = context.read<SpeechService>();
     setState(() { _isListening = true; _liveText = ''; });
-    await _speech.listen(
-      onResult: (r) {
-        setState(() => _liveText = r.recognizedWords);
-        if (r.finalResult && r.recognizedWords.isNotEmpty) {
-          _stopVoice(send: true);
+    await speechService.listen(
+      onResult: (text, isFinal) {
+        if (mounted) {
+          setState(() {
+            _liveText = text;
+            if (isFinal) {
+              _isListening = false;
+              _checkPronunciation(text);
+            }
+          });
         }
       },
       listenFor: const Duration(seconds: 20),
       pauseFor: const Duration(seconds: 3),
-      partialResults: true, localeId: 'en_US',
+      partialResults: true,
+      localeId: 'en_US',
     );
   }
 
+  Future<void> _checkPronunciation(String text) async {
+    final state = context.read<AppState>();
+    final targetWord = state.wordOfTheDay.word.toLowerCase().trim();
+    final spokenText = text.toLowerCase().trim();
+    
+    // Simple check: does the spoken text contain the target word?
+    final bool match = spokenText.contains(targetWord);
+    
+    setState(() {
+      _evalResult = {
+        'isCorrect': match,
+        'xp': match ? 10 : 2,
+        'feedback': match 
+            ? "Great pronunciation! I heard you say '$text'." 
+            : "I heard '$text', but I was listening for '$targetWord'. Try again!",
+        'improvedExample': match ? null : "Try to emphasize the '${targetWord[0]}' sound."
+      };
+    });
+
+    if (match) {
+      state.addXP(10);
+      _speakSafe("Well done!");
+    } else {
+      state.addXP(2);
+      _speakSafe("Let's try that again.");
+    }
+  }
+
   Future<void> _stopVoice({bool send = false}) async {
-    await _speech.stop();
-    setState(() => _isListening = false);
+    final speechService = context.read<SpeechService>();
+    await speechService.stop();
+    if (mounted) setState(() => _isListening = false);
     if (send && _liveText.isNotEmpty) {
       _practiceCtrl.text = _liveText;
       _evaluateUsage();
@@ -118,188 +152,390 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   @override
-  void dispose() { _practiceCtrl.dispose(); _speech.stop(); _tts.stop(); super.dispose(); }
+  void dispose() { 
+    _practiceCtrl.dispose(); 
+    _tts.stop(); 
+    super.dispose(); 
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final theme = Theme.of(context);
+    final word = state.wordOfTheDay;
+    
+
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Vocabulary Builder 📖'),
+        title: Text('Vocabulary Explorer', style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 20)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadDailyWord, tooltip: 'New Word'),
+          IconButton(
+            icon: const Icon(Icons.auto_stories_rounded), // Distinguishable from refresh
+            onPressed: () {}, // History view
+          ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-          : _currentWord == null
-              ? const Center(child: Text('Error loading word', style: TextStyle(color: Colors.white54)))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    // Stats bar
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.darkBorder)),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                        _miniStat('📚', '${state.profile.wordsLearned}', 'Learned'),
-                        _miniStat('🔥', '${state.profile.challengeStreak}', 'Streak'),
-                        _miniStat('⭐', '${state.profile.totalXP}', 'Total XP'),
-                      ]),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Word Card
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [AppTheme.primary.withOpacity(0.12), AppTheme.secondary.withOpacity(0.08)]),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
-                      ),
-                      child: Column(children: [
-                        Text('Word of the Day', style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        Text(_currentWord!.word.toUpperCase(), style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 28, letterSpacing: 2)),
-                        if (_currentWord!.pronunciation.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          GestureDetector(
-                            onTap: () => _tts.speak(_currentWord!.word),
-                            child: Row(mainAxisSize: MainAxisSize.min, children: [
-                              const Icon(Icons.volume_up_rounded, color: AppTheme.accent, size: 16),
-                              const SizedBox(width: 4),
-                              Text(_currentWord!.pronunciation, style: GoogleFonts.dmSans(color: AppTheme.accent, fontSize: 13)),
-                            ]),
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-                        Text(_currentWord!.partOfSpeech, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 12, fontStyle: FontStyle.italic)),
-                        const SizedBox(height: 12),
-                        Text(_currentWord!.meaning, textAlign: TextAlign.center,
-                          style: GoogleFonts.dmSans(color: Colors.white, fontSize: 15, height: 1.5)),
-                      ]),
-                    ).animate().fadeIn().scale(begin: const Offset(0.95, 0.95)),
-                    const SizedBox(height: 16),
-
-                    // Show/Hide details
-                    GestureDetector(
-                      onTap: () => setState(() => _showDetails = !_showDetails),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.darkBorder)),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Icon(_showDetails ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: AppTheme.primary, size: 18),
-                          const SizedBox(width: 6),
-                          Text(_showDetails ? 'Hide Details' : 'Show Synonyms, Antonyms & Example',
-                            style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ]),
-                      ),
-                    ),
-
-                    if (_showDetails) ...[
-                      const SizedBox(height: 12),
-                      if (_currentWord!.synonyms.isNotEmpty) _detailRow('Synonyms', _currentWord!.synonyms.join(', '), AppTheme.primary),
-                      if (_currentWord!.antonyms.isNotEmpty) _detailRow('Antonyms', _currentWord!.antonyms.join(', '), AppTheme.danger),
-                      if (_currentWord!.example.isNotEmpty) _detailRow('Example', _currentWord!.example, AppTheme.accent),
-                    ],
-
-                    const SizedBox(height: 24),
-
-                    // Practice Section
-                    Text('Practice: Use it in a sentence', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Text('Type or speak a sentence using "${_currentWord!.word}"',
-                      style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 13)),
-                    const SizedBox(height: 12),
-
-                    if (_isListening && _liveText.isNotEmpty)
-                      Container(
-                        width: double.infinity, padding: const EdgeInsets.all(12), margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(color: AppTheme.danger.withOpacity(0.06), borderRadius: BorderRadius.circular(10)),
-                        child: Text(_liveText, style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 13)),
-                      ),
-
-                    Row(children: [
-                      Expanded(child: TextField(
-                        controller: _practiceCtrl,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                        decoration: const InputDecoration(hintText: 'Type your sentence...', isDense: true),
-                      )),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => _isListening ? _stopVoice(send: true) : _startVoice(),
-                        child: Container(width: 40, height: 40,
-                          decoration: BoxDecoration(shape: BoxShape.circle,
-                            color: _isListening ? AppTheme.danger.withOpacity(0.15) : AppTheme.darkSurface),
-                          child: Icon(_isListening ? Icons.stop : Icons.mic, color: _isListening ? AppTheme.danger : Colors.white54, size: 18)),
-                      ),
-                    ]),
-                    const SizedBox(height: 12),
-                    SizedBox(width: double.infinity, child: ElevatedButton(
-                      onPressed: _evaluating ? null : _evaluateUsage,
-                      child: _evaluating
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.darkBg))
-                          : const Text('Check Usage 🤖'),
-                    )),
-
-                    if (_evalResult != null) ...[
-                      const SizedBox(height: 16),
-                      _buildEvalResult(),
-                    ],
-                    const SizedBox(height: 24),
-                  ]),
-                ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.colorScheme.secondary.withOpacity(0.2),
+              theme.scaffoldBackgroundColor,
+            ],
+          ),
+        ),
+        child: state.isRefreshingWord
+            ? Center(child: CircularProgressIndicator(color: theme.colorScheme.primary))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 120, 20, 40),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _buildStatsBar(theme, state),
+                  const SizedBox(height: 32),
+                  
+                  // Main Content Card
+                  _buildMainWordCard(theme, word),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildDetailsToggle(theme),
+                  
+                  if (_showDetails) 
+                    _buildDetailsExpansion(theme, word).animate().fadeIn(),
+                    
+                  const SizedBox(height: 40),
+                  
+                  _buildPracticeSection(theme, word),
+                  
+                  if (_evalResult != null)
+                    _buildEvalResult(theme).animate().fadeIn().slideY(begin: 0.1),
+                    
+                  const SizedBox(height: 40),
+                  
+                  _buildHistorySection(theme, state),
+                ]),
+              ),
+      ),
     );
   }
 
-  Widget _miniStat(String emoji, String value, String label) => Column(children: [
-    Text(emoji, style: const TextStyle(fontSize: 18)),
-    Text(value, style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-    Text(label, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 10)),
-  ]);
-
-  Widget _detailRow(String label, String value, Color color) => Container(
-    width: double.infinity,
-    margin: const EdgeInsets.only(bottom: 8),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(color: color.withOpacity(0.06), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.2))),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: GoogleFonts.dmSans(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-      const SizedBox(height: 4),
-      Text(value, style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 13, height: 1.5)),
-    ]),
-  );
-
-  Widget _buildEvalResult() {
-    final correct = _evalResult!['correct'] == true;
-    final score = (_evalResult!['score'] as num?)?.toDouble() ?? 7.0;
-    final color = correct ? AppTheme.primary : AppTheme.danger;
+  Widget _buildStatsBar(ThemeData theme, AppState state) {
     return Container(
-      width: double.infinity, padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withOpacity(0.25))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Text(correct ? '✅ Correct!' : '❌ Try Again', style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w700, fontSize: 15)),
-          const Spacer(),
-          Text('${score.toStringAsFixed(1)}/10', style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w800)),
-        ]),
-        const SizedBox(height: 8),
-        Text(_evalResult!['feedback'] ?? '', style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 13, height: 1.5)),
-        if ((_evalResult!['betterExample'] as String?)?.isNotEmpty == true) ...[
-          const SizedBox(height: 8),
-          Text('💡 Better example:', style: GoogleFonts.dmSans(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.w700)),
-          Text(_evalResult!['betterExample'], style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 12, fontStyle: FontStyle.italic)),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.5)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _statItem('📚', state.profile.wordsLearned, 'Learned'),
+              _statItem('🔥', state.profile.streakDays, 'Streak'),
+              _statItem('⭐', state.profile.totalXP, 'Total XP'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statItem(String emoji, int val, String label) {
+    final theme = Theme.of(context);
+    return Column(children: [
+      Text(emoji, style: const TextStyle(fontSize: 22)),
+      const SizedBox(height: 4),
+      TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: val.toDouble()),
+        duration: const Duration(seconds: 1),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) {
+          return Text(
+            value.toInt().toString(),
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16),
+          );
+        },
+      ),
+      Text(label, style: GoogleFonts.outfit(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5))),
+    ]);
+  }
+
+  Widget _buildMainWordCard(ThemeData theme, VocabularyWord word) {
+    final bool hasViz = word.imageUrl != null && word.imageUrl!.isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [BoxShadow(color: theme.colorScheme.onSurface.withOpacity(0.05), blurRadius: 30, offset: const Offset(0, 15))],
+      ),
+      child: Column(
+        children: [
+          if (hasViz)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+              child: Image.network(
+                word.imageUrl!,
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (c, e, s) => Container(
+                  height: 200, 
+                  color: theme.colorScheme.primary.withOpacity(0.05),
+                  child: Center(child: Icon(Icons.image_outlined, color: theme.colorScheme.primary.withOpacity(0.2), size: 48)),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                Text('WORD OF THE DAY', 
+                  style: GoogleFonts.outfit(color: theme.colorScheme.primary, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 10)),
+                const SizedBox(height: 16),
+                FittedBox(
+                  child: Text(word.word.toUpperCase(), 
+                    style: GoogleFonts.outfit(fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: 1, color: theme.colorScheme.onSurface)),
+                ),
+                const SizedBox(height: 12),
+                _buildPronunciationBadge(theme, word),
+                const SizedBox(height: 24),
+                Text(word.meaning, textAlign: TextAlign.center,
+                  style: GoogleFonts.dmSans(fontSize: 15, height: 1.6, fontWeight: FontWeight.w500)),
+                if (word.translatedMeaning != null && word.translatedMeaning != word.meaning)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                      child: Text(word.translatedMeaning!, 
+                        style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontWeight: FontWeight.w700, fontStyle: FontStyle.italic, fontSize: 13)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
-        if ((_evalResult!['tip'] as String?)?.isNotEmpty == true) ...[
-          const SizedBox(height: 6),
-          Text('📝 ${_evalResult!['tip']}', style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 12)),
+      ),
+    ).animate().fadeIn().slideY(begin: 0.05);
+  }
+
+  Widget _buildPronunciationBadge(ThemeData theme, VocabularyWord word) {
+    return GestureDetector(
+      onTap: () => _speakSafe(word.word),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.secondary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.volume_up_rounded, color: theme.colorScheme.primary, size: 16),
+            const SizedBox(width: 8),
+            Text(word.pronunciation, 
+              style: GoogleFonts.outfit(color: theme.colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailsToggle(ThemeData theme) {
+    return GestureDetector(
+      onTap: () => setState(() => _showDetails = !_showDetails),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(_showDetails ? Icons.expand_less : Icons.expand_more, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Text(_showDetails ? 'Hide Details' : 'Synonyms, Antonyms & Examples',
+              style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailsExpansion(ThemeData theme, VocabularyWord word) {
+    return Column(children: [
+      const SizedBox(height: 12),
+      if (word.synonyms.isNotEmpty) _detailBox('Synonyms', word.synonyms.join(', '), theme.colorScheme.primary),
+      if (word.antonyms.isNotEmpty) _detailBox('Antonyms', word.antonyms.join(', '), AppTheme.danger),
+      if (word.example.isNotEmpty) _detailBox('Real-world Example', word.example, theme.colorScheme.tertiary),
+    ]);
+  }
+
+  Widget _detailBox(String title, String val, Color color) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title.toUpperCase(), style: GoogleFonts.outfit(color: color, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 1)),
+          const SizedBox(height: 4),
+          Text(val, style: GoogleFonts.dmSans(fontWeight: FontWeight.w600, fontSize: 13, height: 1.5)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPracticeSection(ThemeData theme, VocabularyWord word) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Practice Mastery', 
+          style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
-        Text('+${_evalResult!['xp']} XP ⭐', style: GoogleFonts.dmSans(color: AppTheme.accent, fontWeight: FontWeight.w700)),
-      ]),
-    ).animate().fadeIn();
+        Text('Build a professional sentence using "${word.word}"', 
+          style: theme.textTheme.bodySmall),
+        const SizedBox(height: 20),
+        
+        if (_isListening && _liveText.isNotEmpty)
+          Container(
+            width: double.infinity, padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(color: AppTheme.danger.withOpacity(0.04), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.danger.withOpacity(0.1))),
+            child: Text(_liveText, style: theme.textTheme.bodyMedium?.copyWith(color: AppTheme.danger, fontWeight: FontWeight.w600)),
+          ).animate().shake(),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _practiceCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'I will use this logic in my next...',
+                  fillColor: Colors.white,
+                  filled: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () => _isListening ? _stopVoice(send: true) : _startVoice(),
+              child: Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: _isListening ? AppTheme.danger : theme.colorScheme.primary, shape: BoxShape.circle),
+                child: Icon(_isListening ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 60,
+          child: ElevatedButton(
+            onPressed: _evaluating ? null : _evaluateUsage,
+            child: _evaluating 
+              ? const CircularProgressIndicator(color: Colors.white)
+              : Text('Evaluate Sentence', style: GoogleFonts.outfit(fontWeight: FontWeight.w900)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEvalResult(ThemeData theme) {
+    final correct = _evalResult!['isCorrect'] == true;
+    final color = correct ? theme.colorScheme.primary : AppTheme.danger;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 24),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)), child: Text(correct ? 'EXCELLENT' : 'NEEDS WORK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10))),
+              const Spacer(),
+              Text('+${_evalResult!['xp']} XP', style: GoogleFonts.outfit(color: color, fontWeight: FontWeight.w900)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(_evalResult!['feedback'] ?? '', style: GoogleFonts.dmSans(fontWeight: FontWeight.w500, height: 1.5)),
+          if (_evalResult!['improvedExample'] != null) ...[
+            const SizedBox(height: 16),
+            Text('BETTER VERSION:', style: GoogleFonts.outfit(color: theme.colorScheme.tertiary, fontWeight: FontWeight.w900, fontSize: 10)),
+            const SizedBox(height: 4),
+            Text(_evalResult!['improvedExample'], style: GoogleFonts.dmSans(fontStyle: FontStyle.italic, color: theme.colorScheme.tertiary)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistorySection(ThemeData theme, AppState state) {
+    // Show last 3 learned words
+    final learned = state.vocabulary.where((v) => v.learned).toList().reversed.take(3).toList();
+    if (learned.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Mastered Recent', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 100,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: learned.length,
+            itemBuilder: (context, index) {
+              final v = learned[index];
+              return Container(
+                width: 150,
+                margin: const EdgeInsets.only(right: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1))),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(v.word, style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 14), overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text('Learned ✅', style: GoogleFonts.outfit(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 }

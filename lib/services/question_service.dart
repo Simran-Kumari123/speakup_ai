@@ -1,5 +1,6 @@
 import 'dart:math';
-import '../models/question_model.dart';
+import '../models/models.dart';
+
 
 class QuestionService {
   static final QuestionService _instance = QuestionService._internal();

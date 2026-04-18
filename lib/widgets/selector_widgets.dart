@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../models/question_model.dart';
+import '../models/models.dart';
 import '../theme/app_theme.dart';
 
 class CategorySelector extends StatelessWidget {
@@ -17,6 +17,7 @@ class CategorySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -25,7 +26,7 @@ class CategorySelector extends StatelessWidget {
           child: Text(
             'Category',
             style: GoogleFonts.dmSans(
-              color: Colors.white,
+              color: theme.textTheme.bodySmall?.color ?? AppTheme.earthyText,
               fontSize: 14,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
@@ -39,6 +40,7 @@ class CategorySelector extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: _categoryButton(
+                  context,
                   label: 'All',
                   emoji: '🎯',
                   isSelected: selectedCategory == null,
@@ -51,6 +53,7 @@ class CategorySelector extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: _categoryButton(
+                    context,
                     label: category.replaceFirst(
                       category[0],
                       category[0].toUpperCase(),
@@ -60,7 +63,7 @@ class CategorySelector extends StatelessWidget {
                     onTap: () => onChanged(isSelected ? null : category),
                   ),
                 );
-              }).toList(),
+              }),
             ],
           ),
         ),
@@ -68,12 +71,14 @@ class CategorySelector extends StatelessWidget {
     );
   }
 
-  Widget _categoryButton({
+  Widget _categoryButton(
+    BuildContext context, {
     required String label,
     required String emoji,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -85,10 +90,10 @@ class CategorySelector extends StatelessWidget {
                   colors: [AppTheme.primary, AppTheme.secondary],
                 )
               : null,
-          color: isSelected ? null : AppTheme.darkCard,
+          color: isSelected ? null : theme.cardColor.withOpacity(0.5),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? Colors.transparent : AppTheme.darkBorder,
+            color: isSelected ? Colors.transparent : theme.dividerColor.withOpacity(0.05),
           ),
           boxShadow: isSelected
               ? [
@@ -108,7 +113,7 @@ class CategorySelector extends StatelessWidget {
             Text(
               label,
               style: GoogleFonts.dmSans(
-                color: isSelected ? Colors.white : Colors.white70,
+                color: isSelected ? theme.colorScheme.onPrimary : theme.textTheme.bodyMedium?.color,
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
               ),
@@ -134,6 +139,7 @@ class DifficultySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -142,7 +148,7 @@ class DifficultySelector extends StatelessWidget {
           child: Text(
             'Difficulty Level',
             style: GoogleFonts.dmSans(
-              color: Colors.white,
+              color: theme.textTheme.bodySmall?.color ?? AppTheme.earthyText,
               fontSize: 14,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
@@ -153,6 +159,7 @@ class DifficultySelector extends StatelessWidget {
           children: [
             Expanded(
               child: _difficultyButton(
+                context,
                 label: 'All',
                 isSelected: selectedDifficulty == null,
                 onTap: () => onChanged(null),
@@ -161,6 +168,7 @@ class DifficultySelector extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _difficultyButton(
+                context,
                 label: 'Beginner',
                 color: Colors.green,
                 isSelected: selectedDifficulty == 'beginner',
@@ -172,6 +180,7 @@ class DifficultySelector extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _difficultyButton(
+                context,
                 label: 'Inter',
                 color: Colors.orange,
                 isSelected: selectedDifficulty == 'intermediate',
@@ -183,6 +192,7 @@ class DifficultySelector extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _difficultyButton(
+                context,
                 label: 'Advanced',
                 color: Colors.red,
                 isSelected: selectedDifficulty == 'advanced',
@@ -197,22 +207,24 @@ class DifficultySelector extends StatelessWidget {
     );
   }
 
-  Widget _difficultyButton({
+  Widget _difficultyButton(
+    BuildContext context, {
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
     Color? color,
   }) {
-    final bgColor = color ?? Colors.grey;
+    final theme = Theme.of(context);
+    final accentColor = color ?? theme.colorScheme.primary;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? bgColor.withOpacity(0.25) : AppTheme.darkCard,
+          color: isSelected ? accentColor.withOpacity(0.12) : theme.cardColor.withOpacity(0.5),
           border: Border.all(
-            color: isSelected ? bgColor : AppTheme.darkBorder,
+            color: isSelected ? accentColor : theme.dividerColor.withOpacity(0.05),
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -221,7 +233,7 @@ class DifficultySelector extends StatelessWidget {
           child: Text(
             label,
             style: GoogleFonts.dmSans(
-              color: isSelected ? bgColor : Colors.white70,
+              color: isSelected ? accentColor : theme.textTheme.bodyMedium?.color,
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
             ),

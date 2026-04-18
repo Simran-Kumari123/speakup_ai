@@ -4,6 +4,29 @@ import '../models/models.dart';
 import 'ai_feedback_service.dart';
 
 class GDService {
+  static Future<String> generateTopic({String? role, String? resumeContext}) async {
+    final prompt = '''
+    Generate a challenging and controversial topic for a Group Discussion.
+    ${role != null ? 'Target Audience: Professionals in $role' : ''}
+    ${resumeContext != null ? 'User Profile Context: $resumeContext' : ''}
+    
+    The topic should be:
+    1. Debatable with clear Support/Oppose/Neutral stances.
+    2. Relevant to current industry trends.
+    3. Concisely stated (one sentence).
+    
+    Respond with ONLY the topic string. No other text.
+    ''';
+
+    try {
+      final response = await AIFeedbackService.callAIRaw(prompt);
+      return response.trim().replaceAll('"', '');
+    } catch (e) {
+      debugPrint('⚠️ GD Topic Gen Error: $e');
+      return "The Future of AI in Modern Workforce";
+    }
+  }
+
   static Future<List<GDParticipant>> generateParticipants(String topic) async {
     final prompt = '''
     Topic for Group Discussion: "$topic"
@@ -25,7 +48,7 @@ class GDService {
     ''';
 
     try {
-      final response = await AIFeedbackService.callGeminiRaw(prompt);
+      final response = await AIFeedbackService.callAIRaw(prompt);
       final cleanJson = _extractJson(response);
       final data = jsonDecode(cleanJson);
       return (data['participants'] as List).map((p) => GDParticipant.fromJson(p)).toList();
@@ -64,13 +87,13 @@ class GDService {
     
     ROLEPLAY TASK:
     Provide the next contribution as ${speakingParticipant.name}. 
-    - MANDATORY: Begin by briefly acknowledging or rebutting the point made by the last speaker (User or AI).
-    - Address other participants by name if you disagree or build on their points.
-    - Use natural fillers like "I see your point...", "Building on that...", "I strongly disagree with Rahul because...".
+    - MANDATORY: You must respond to the LAST thing said in the conversation.
+    - If you are responding to the "User", adress them as "User" and acknowledge their specific argument directly before presenting your own.
+    - If you are responding to another AI (like ${otherParticipants.isNotEmpty ? otherParticipants[0].name : 'a peer'}), mention their name and whether you support or challenge their specific point.
+    - Stay 100% in character as a ${speakingParticipant.role}, using jargon appropriate for your field.
     - Express your opinion clearly based on your "${speakingParticipant.opinion}" stance.
-    - Keep it concise (max 2-3 impactful sentences).
-    - Avoid being generic; be specific to the topic and history.
-    
+    - Keep it conversational (2-4 sentences). Use rhetorical questions or bridges like "But have we considered...?" or "Exactly, which is why...".
+
     Respond with ONLY the JSON in this format:
     {
       "response": "string"
@@ -78,7 +101,7 @@ class GDService {
     ''';
 
     try {
-      final response = await AIFeedbackService.callGeminiRaw(prompt);
+      final response = await AIFeedbackService.callAIRaw(prompt);
       final cleanJson = _extractJson(response);
       final data = jsonDecode(cleanJson);
       return ChatMessage(
@@ -109,8 +132,8 @@ class GDService {
 
   static List<GDParticipant> _fallbackParticipants() => [
     GDParticipant(name: 'Rahul', role: 'Engineering Student', opinion: 'Support', avatarEmoji: '👨‍💻', personality: 'Analytical'),
-    GDParticipant(name: 'Priya', role: 'MBA Aspirant', opinion: 'Oppose', avatarEmoji: '👩‍💼', personality: 'Aggressive'),
-    GDParticipant(name: 'Anish', role: 'Software Developer', opinion: 'Neutral', avatarEmoji: '👨‍🔬', personality: 'Calm'),
-    GDParticipant(name: 'Sneha', role: 'Design Student', opinion: 'Support', avatarEmoji: '👩‍🎨', personality: 'Creative'),
+    GDParticipant(name: 'Dr. Priya', role: 'Economics Professor', opinion: 'Oppose', avatarEmoji: '👩‍🏫', personality: 'Critical'),
+    GDParticipant(name: 'Anish', role: 'Senior Developer', opinion: 'Neutral', avatarEmoji: '👨‍🔬', personality: 'Calm'),
+    GDParticipant(name: 'Elena', role: 'Policy Researcher', opinion: 'Support', avatarEmoji: '👩‍⚖️', personality: 'Evidence-based'),
   ];
 }

@@ -7,18 +7,26 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:278000782008:android:26747e3b637d95753a424d",
+        "mobilesdk_app_id": "1:278000782008:android:4c91151cde0e8b7f3a424d",
         "android_client_info": {
-          "package_name": "com.example.speakup"
+          "package_name": "com.marwadiuniversity.speakup_ai"
         }
       },
       "oauth_client": [
         {
-          "client_id": "278000782008-841g6mhicea46do9vlr2dqlmtl186aki.apps.googleusercontent.com",
+          "client_id": "278000782008-3160c8vq576k8jb5rs5kel0qdk4qnjoh.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.speakup",
+            "package_name": "com.marwadiuniversity.speakup_ai",
             "certificate_hash": "0c7e0a922a5700040fa38920d6a997c66c9d6351"
+          }
+        },
+        {
+          "client_id": "278000782008-vnkf2n6qnrh1hn6u091pmfcuk4cbe590.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marwadiuniversity.speakup_ai",
+            "certificate_hash": "b4ae46152f5d21ac4668d4db31714a7c0878e69c"
           }
         },
         {
@@ -37,6 +45,13 @@
             {
               "client_id": "278000782008-ijsh6efn5sjksoep99v9m5p95n3as80g.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "278000782008-ulicjd0l22rk4042nr66dfjs6d4plf3v.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.talkAi"
+              }
             }
           ]
         }

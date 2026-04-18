@@ -8,6 +8,7 @@ class PremiumButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Color? color;
   final bool isLoading;
+  final double? width;
 
   const PremiumButton({
     super.key,
@@ -16,6 +17,7 @@ class PremiumButton extends StatelessWidget {
     this.onPressed,
     this.color,
     this.isLoading = false,
+    this.width,
   });
 
   @override
@@ -23,7 +25,7 @@ class PremiumButton extends StatelessWidget {
     final baseColor = color ?? AppTheme.primary;
     
     return Container(
-      width: double.infinity,
+      width: width ?? double.infinity,
       height: 56,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),

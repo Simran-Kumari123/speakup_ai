@@ -66,7 +66,7 @@ class DefaultFirebaseOptions {
     storageBucket: 'speakup-5cafa.firebasestorage.app',
     androidClientId: '278000782008-841g6mhicea46do9vlr2dqlmtl186aki.apps.googleusercontent.com',
     iosClientId: '278000782008-ulicjd0l22rk4042nr66dfjs6d4plf3v.apps.googleusercontent.com',
-    iosBundleId: 'com.example.talkAi',
+    iosBundleId: 'com.marwadiuniversity.speakup_ai',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(

@@ -2,557 +2,285 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:percent_indicator/percent_indicator.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-
+import 'package:intl/intl.dart';
 import '../services/app_state.dart';
-import '../theme/app_theme.dart';
-import '../widgets/app_widgets.dart';
-import 'chat_screen.dart';
+import '../widgets/responsive_layout.dart';
 import 'interview_screen.dart';
 import 'speaking_screen.dart';
-import 'progress_screen.dart';
-import 'profile_screen.dart';
-import 'speaking_screen.dart';
-import '../widgets/responsive_layout.dart';
-
-import 'challenges_screen.dart';
 import 'vocabulary_screen.dart';
+import 'chat_screen.dart';
+import 'profile_screen.dart';
+import 'progress_screen.dart';
+import 'daily_challenge_screen.dart';
+import 'quiz_screen.dart';
 import 'gd_screen.dart';
+import 'challenges_screen.dart';
+import 'scenario_screen.dart';
+import 'resume_mode_screen.dart';
+import 'interview_screen.dart';
+import '../models/models.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   int _tabIndex = 0;
-
-  final _screens = const [
-    _DashboardBody(),
-    ChatScreen(),
-    ProgressScreen(),
-    ProfileScreen(),
-  ];
+  late final AnimationController _animController;
 
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
   }
 
-  void _changeTab(int index) {
-    setState(() => _tab = index);
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _onTabChanged(int index) {
+    setState(() => _tabIndex = index);
+    _animController.forward(from: 0.0);
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveLayout.isDesktop(context);
+    
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: _tab == 0 ? null : AppBar(
-        title: Text(_getTabTitle()),
-        actions: _getTabActions(),
-      ),
-      body: Material(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: IndexedStack(
-          index: _tab,
-          children: [
-            _Dashboard(
-              key: const ValueKey('tab_home'),
-              onProfileClick: () => _changeTab(4),
-              onTabChange: _changeTab,
+      body: Row(
+        children: [
+          if (isDesktop) _buildSidebar(),
+          Expanded(
+            child: IndexedStack(
+              index: _tabIndex,
+              children: [
+                _DashboardTab(animation: _animController),
+                const SpeakingScreen(),
+                const InterviewScreen(),
+                const VocabularyScreen(),
+                const ChatScreen(),
+              ],
             ),
-            const ChatScreen(key: ValueKey('tab_chat')),
-            const InterviewScreen(key: ValueKey('tab_interview')),
-            const ProgressScreen(key: ValueKey('tab_progress')),
-            const ProfileScreen(key: ValueKey('tab_profile')),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _BottomNav(
-        current: _tab,
-        onTap: _changeTab,
-      ),
-    );
-  }
-
-  String _getTabTitle() {
-    switch (_tab) {
-      case 1: return 'AI Coach';
-      case 2:
-        return 'Mock Interview';
-      case 3: return 'Your Progress';
-      case 4: return 'Profile Settings';
-      default: return '';
-    }
-  }
-
-  List<Widget>? _getTabActions() {
-    if (_tab == 2) { // Interview
-      return [
-        IconButton(
-          icon: const Icon(Icons.help_outline_rounded),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Practice common interview questions with AI feedback!')),
-            );
-          },
-        ),
-        const SizedBox(width: 8),
-      ];
-    }
-    return null;
-  }
-}
-
-class _BottomNav extends StatelessWidget {
-  final int current;
-  final void Function(int) onTap;
-  const _BottomNav({required this.current, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (Icons.home_rounded, 'Home'),
-      (Icons.chat_bubble_rounded, 'Chat'),
-      (Icons.mic_rounded, 'Interview'),
-      (Icons.bar_chart_rounded, 'Progress'),
-      (Icons.person_rounded, 'Profile'),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.only(top: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color ?? (Theme.of(context).brightness == Brightness.dark ? AppTheme.darkCard : AppTheme.lightCard),
-        border: Border(top: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBorder : AppTheme.lightBorder, width: 0.5)),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2), // Reduced from 4
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(items.length, (i) {
-              final active = current == i;
-              return GestureDetector(
-                onTap: () => onTap(i),
-                behavior: HitTestBehavior.opaque,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: active ? AppTheme.primary.withAlpha(26) : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        items[i].$1,
-                        color: active ? AppTheme.primary : AppTheme.textSecondary,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      items[i].$2,
-                      style: GoogleFonts.outfit(
-                        fontSize: 10,
-                        color: active ? AppTheme.primary : AppTheme.textSecondary,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
           ),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: active ? AppTheme.primary : Colors.white38, size: 22),
-          if (active) ...[
-            const SizedBox(width: 6),
-            Text(label, style: GoogleFonts.dmSans(color: AppTheme.primary, fontWeight: FontWeight.w700, fontSize: 13)),
-          ],
-        ]),
+        ],
+      ),
+      bottomNavigationBar: !isDesktop 
+        ? Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1))),
+            ),
+            child: BottomNavigationBar(
+              currentIndex: _tabIndex,
+              onTap: _onTabChanged,
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: Theme.of(context).colorScheme.primary,
+              unselectedItemColor: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.4),
+              selectedLabelStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w800, fontSize: 11),
+              unselectedLabelStyle: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500),
+              elevation: 0,
+              items: const [
+                BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded, size: 22), label: 'Home'),
+                BottomNavigationBarItem(icon: Icon(Icons.mic_rounded, size: 22), label: 'Speak'),
+                BottomNavigationBarItem(icon: Icon(Icons.business_center_rounded, size: 22), label: 'Interview'),
+                BottomNavigationBarItem(icon: Icon(Icons.book_rounded, size: 22), label: 'Vocab'),
+                BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded, size: 22), label: 'Coach'),
+              ],
+            ),
+          )
+        : null,
+    );
+  }
+
+  Widget _buildSidebar() {
+    final theme = Theme.of(context);
+    return Container(
+      width: 280,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondary, // Sage Green sidebar
+        border: Border(right: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1))),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 60),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(Icons.auto_awesome, color: theme.colorScheme.primary, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Text(
+                  'SpeakUp AI',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 50),
+          _sidebarItem(0, Icons.dashboard_rounded, 'Dashboard'),
+          _sidebarItem(1, Icons.mic_rounded, 'Speaking Practice'),
+          _sidebarItem(2, Icons.business_center_rounded, 'Mock Interviews'),
+          _sidebarItem(null, Icons.rocket_launch_rounded, 'Resume Mode', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ResumeModeScreen()))),
+          _sidebarItem(3, Icons.book_rounded, 'Vocabulary Builder'),
+          _sidebarItem(null, Icons.groups_rounded, 'Group Discussion', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GDScreen()))),
+          _sidebarItem(null, Icons.quiz_rounded, 'Quiz Challenge', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QuizScreen()))),
+          _sidebarItem(null, Icons.flash_on_rounded, 'Daily Challenges', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyChallengeScreen()))),
+          _sidebarItem(4, Icons.chat_bubble_rounded, 'AI Chat Coach'),
+          const Spacer(),
+          _sidebarItem(null, Icons.analytics_outlined, 'Statistics', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProgressScreen()))),
+          _sidebarItem(null, Icons.person_outline, 'Profile', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()))),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidebarItem(int? index, IconData icon, String label, {VoidCallback? onTap}) {
+    final isSelected = index != null && _tabIndex == index;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        onTap: onTap ?? () => _onTabChanged(index!),
+        selected: isSelected,
+        selectedTileColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        leading: Icon(icon, color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.3), size: 22),
+        title: Text(label, style: GoogleFonts.dmSans(fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600, color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).textTheme.bodyMedium?.color)),
       ),
     );
   }
 }
 
-class _Dashboard extends StatelessWidget {
-  final VoidCallback onProfileClick;
-  final Function(int) onTabChange;
-  const _Dashboard({required this.onProfileClick, required this.onTabChange, super.key});
+class _DashboardTab extends StatelessWidget {
+  final Animation<double> animation;
+  const _DashboardTab({required this.animation});
+
+  static const _motivations = [
+    'Consistency is your superpower! 🎙️',
+    'Ready to master a new skill today? 🚀',
+    'Your dream job is waiting. Practice hard! 💼',
+    'Fluent English is within your reach. ✨',
+    'Small wins every day lead to big success! 🏆'
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final state   = context.watch<AppState>();
+    final theme = Theme.of(context);
+    final state = context.watch<AppState>();
     final profile = state.profile;
-
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
+    final motivation = _motivations[profile.streakDays % _motivations.length];
+    
+    return FadeTransition(
+      opacity: animation,
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
-          // 1. Header with Profile Action
+          // ── Premium Header ──────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 64, 24, 8),
+              padding: const EdgeInsets.fromLTRB(20, 60, 20, 24),
               child: Row(
                 children: [
                   Expanded(
                     child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'WELCOME BACK',
-                            style: GoogleFonts.outfit(
-                              color: AppTheme.primary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Welcome back,', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                        const SizedBox(height: 4),
+                        Text(profile.name.isNotEmpty ? profile.name : 'Learner', 
+                            style: Theme.of(context).textTheme.displaySmall),
+                        const SizedBox(height: 6),
+                        Text(motivation, style: GoogleFonts.dmSans(color: Theme.of(context).colorScheme.primary.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.w600)),
+                        if (state.isResumeMode && state.activeResume != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [BoxShadow(color: theme.colorScheme.primary.withOpacity(0.3), blurRadius: 8)],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.rocket_launch_rounded, size: 12, color: Colors.white),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'CAREER FOCUS: ${state.activeResume!.roleTag?.toUpperCase() ?? "ACTIVE"}',
+                                    style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 0.5),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            profile.name.split(' ').first.isEmpty ? "Simran" : profile.name.split(' ').first,
-                            style: Theme.of(context).textTheme.headlineMedium,
-                          ),
                         ],
-                      ),
-                  ),
-                  GestureDetector(
-                    onTap: onProfileClick,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.primary.withAlpha(51), width: 2),
-                      ),
-                      child: CircleAvatar(
-                        radius: 26,
-                        backgroundColor: AppTheme.primary.withAlpha(26),
-                        backgroundImage: state.profilePicBase64 != null
-                            ? MemoryImage(base64Decode(state.profilePicBase64!))
-                            : null,
-                        child: state.profilePicBase64 == null
-                            ? Text(
-                                profile.name.isNotEmpty ? profile.name[0].toUpperCase() : 'S',
-                                style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 20),
-                              )
-                            : null,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 2. XP & Goal Tracker Card
-          SliverToBoxAdapter(
-            child: ResponsiveContainer(
-              padding: const EdgeInsets.all(24),
-              child: Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  color: Theme.of(context).cardTheme.color ?? (Theme.of(context).brightness == Brightness.dark ? AppTheme.darkCard : AppTheme.lightCard),
-                  border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBorder : AppTheme.lightBorder, width: 1.0),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(Theme.of(context).brightness == Brightness.dark ? 77 : 13),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text('🔥', style: TextStyle(fontSize: 16)),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  '${profile.streakDays} DAY STREAK',
-                                  style: GoogleFonts.outfit(color: AppTheme.accent, fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 1),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Your Daily Goal',
-                            style: GoogleFonts.outfit(color: Theme.of(context).textTheme.headlineMedium?.color, fontWeight: FontWeight.w900, fontSize: 24),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Progress: ${state.todayMinutes} / ${profile.dailyGoalMinutes} mins',
-                            style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: CircularPercentIndicator(
-                          radius: 45,
-                          lineWidth: 10,
-                          percent: (profile.dailyGoalMinutes > 0 ? (state.todayMinutes / profile.dailyGoalMinutes) : 0.0).clamp(0.0, 1.0),
-                          progressColor: AppTheme.primary,
-                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                          circularStrokeCap: CircularStrokeCap.round,
-                          animation: true,
-                          center: Text(
-                            '${(profile.dailyGoalMinutes > 0 ? (state.todayMinutes / profile.dailyGoalMinutes) * 100 : 0).toInt()}%',
-                            style: GoogleFonts.outfit(color: Theme.of(context).textTheme.titleLarge?.color, fontWeight: FontWeight.w900, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // 2.5 Word of the Day
-          SliverToBoxAdapter(
-            child: ResponsiveContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: _wordOfTheDay(context, state),
-            ),
-          ),
-
-          // 3. Quick Actions Header
-          _sectionHeader('QUICK START'),
-          SliverToBoxAdapter(
-            child: ResponsiveContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                children: [
-                  _quickAction(context, '🎤', 'Speaking', AppTheme.primary, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SpeakingScreen()))),
-                  const SizedBox(width: 16),
-                  _quickAction(context, '💼', 'Interview', AppTheme.secondary, () => onTabChange(2)),
-                  const SizedBox(width: 16),
-                  _quickAction(context, '💬', 'AI Chat', AppTheme.accent, () => onTabChange(1)),
-                ],
-              ),
-              const SizedBox(width: 14),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Level ${profile.level}', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-                const SizedBox(height: 4),
-                LinearProgressIndicator(
-                  value: (profile.totalXP % 200) / 200,
-                  backgroundColor: AppTheme.darkSurface,
-                  valueColor: const AlwaysStoppedAnimation(AppTheme.primary),
-                  borderRadius: BorderRadius.circular(4), minHeight: 6,
-                ),
-                const SizedBox(height: 4),
-                Text('${profile.totalXP} XP  •  ${profile.xpToNext} to next level',
-                  style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 11)),
-              ])),
-            ]),
-          ).animate().fadeIn(),
-          const SizedBox(height: 20),
-
-          // 3.2 Daily Challenges Preview
-          _sectionHeader('DAILY CHALLENGES'),
-          SliverToBoxAdapter(
-            child: ResponsiveContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: _challengesPreview(context),
-            ),
-          ),
-
-          // 3.5 Daily Tip / Word of the Day
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.primary, AppTheme.secondary],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(color: AppTheme.primary.withAlpha(77), blurRadius: 15, offset: const Offset(0, 8))
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('💡', style: TextStyle(fontSize: 18)),
-                        const SizedBox(width: 8),
-                        Text(
-                          'DAILY TIP',
-                          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 1.2),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _getDailyTip(profile.name),
-                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ).animate().fadeIn(delay: 100.ms),
-          const SizedBox(height: 24),
-
-          // 4. Performance Header
-          _sectionHeader('PERFORMANCE'),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            sliver: SliverToBoxAdapter(
-              child: ResponsiveContainer(
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: ResponsiveLayout.isPhone(context) ? 2 : 4,
-                  childAspectRatio: ResponsiveLayout.isPhone(context) ? 1.4 : 1.5,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  children: [
-                    _statCard(context, '📚', 'Sessions', '${profile.sessionsCompleted}', 'done', AppTheme.secondary),
-                    _statCard(context, '⏱️', 'Time', '${profile.practiceMinutes}', 'mins', AppTheme.accent),
-                    _statCard(context, '🔤', 'Vocabulary', '${profile.wordsSpoken}', 'words', AppTheme.primary),
-                    _statCard(context, '🏅', 'Badges', '${profile.badges.length}', 'earned', Colors.orange),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // 5. Curated Topics Header
-          _sectionHeader('CURATED TOPICS'),
-          SliverPadding(
-            padding: const EdgeInsets.all(0),
-            sliver: SliverToBoxAdapter(
-              child: ResponsiveContainer(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: kPracticeTopics.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: ResponsiveLayout.isPhone(context) ? 1 : 2,
-                    childAspectRatio: 3.5,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
                   ),
-                  itemBuilder: (ctx, i) {
-                    final topic = kPracticeTopics[i];
-                    final progress = state.profile.topicProgress[topic.id] ?? 0;
-                    return _topicRow(ctx, topic, progress, () {
-                      if (topic.id == 'p3') {
-                        Navigator.push(ctx, MaterialPageRoute(builder: (_) => const GDScreen()));
-                      } else {
-                        Navigator.push(ctx, MaterialPageRoute(builder: (_) => SpeakingScreen(topic: topic)));
-                      }
-                    });
-                  },
-                ),
+                  GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+                    child: Container(
+                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), width: 2)),
+                      child: CircleAvatar(
+                        radius: 26,
+                        backgroundColor: Theme.of(context).inputDecorationTheme.fillColor,
+                        backgroundImage: profile.profilePicBase64 != null 
+                            ? MemoryImage(base64Decode(profile.profilePicBase64!)) : null,
+                        child: profile.profilePicBase64 == null 
+                            ? Text(profile.name.isNotEmpty ? profile.name[0].toUpperCase() : '?',
+                              style: GoogleFonts.dmSans(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w900, fontSize: 18)) : null,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 24),
 
-        const SliverToBoxAdapter(child: SizedBox(height: 40)),
-      ],
-    );
-  }
-
-  Widget _wordOfTheDay(BuildContext context, AppState state) {
-    final word = state.wordOfTheDay;
-    return InkWell(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VocabularyScreen())),
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppTheme.accent.withAlpha(26),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppTheme.accent.withAlpha(51)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('WORD OF THE DAY', style: GoogleFonts.outfit(color: AppTheme.accent, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
-                const Icon(Icons.arrow_forward_rounded, color: AppTheme.accent, size: 18),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(word.word, style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w900, color: Theme.of(context).textTheme.bodyLarge?.color)),
-            const SizedBox(height: 4),
-            Text(word.meaning, style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textSecondary, height: 1.4)),
-            const SizedBox(height: 12),
-            Text('"${word.example}"', style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.accent, fontStyle: FontStyle.italic)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _challengesPreview(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBorder : AppTheme.lightBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: AppTheme.secondary.withAlpha(26), borderRadius: BorderRadius.circular(12)),
-                child: const Text('⚡', style: TextStyle(fontSize: 24)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Boost your verbal skills', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800)),
-                    Text('Try today\'s mini challenges', style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChallengesScreen())),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.secondary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: const Text('Start Challenges', style: TextStyle(fontWeight: FontWeight.w800)),
+          // ── Main Dashboard Content ──────────────────────────────────────────
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                _buildAnimatedDailyGoal(context, profile),
+                const SizedBox(height: 24),
+                _buildQuickChallengeTeaser(context, state),
+                const SizedBox(height: 32),
+                _sectionHeader(context, 'YOUR PROGRESS'),
+                const SizedBox(height: 16),
+                _buildStatsGrid(context, profile),
+                const SizedBox(height: 32),
+                _sectionHeader(context, 'PRACTICE MODES'),
+                const SizedBox(height: 16),
+                _buildPracticeGrid(context),
+                const SizedBox(height: 32),
+                _buildWordOfTheDay(context, state),
+                const SizedBox(height: 32),
+                _sectionHeader(context, 'RECOMMENDED TOPICS'),
+                const SizedBox(height: 16),
+                _buildTopicsList(context),
+                const SizedBox(height: 120),
+              ]),
             ),
           ),
         ],
@@ -560,162 +288,384 @@ class _Dashboard extends StatelessWidget {
     );
   }
 
-  String _getDailyTip(String name) {
-    final tips = [
-      'Try thinking in English for 5 minutes today!',
-      'Record yourself and listen for areas to improve.',
-      'Practice "Self Introduction" topic to boost confidence.',
-      'Focus on clarity over speed while speaking.',
-      'Try using one new vocabulary word in a meeting.',
-    ];
-    return tips[DateTime.now().day % tips.length];
-  }
-
-  // --- Helper Widgets ---
-
-  Widget _sectionHeader(String title) => SliverToBoxAdapter(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-      child: Text(
-        title,
-        style: GoogleFonts.outfit(
-          color: AppTheme.textSecondary,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.2,
-        ),
-      ),
-    ),
+  Widget _sectionHeader(BuildContext context, String title) => Row(
+    children: [
+      Text(title, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 1.5, fontSize: 11)),
+      const SizedBox(width: 12),
+      Expanded(child: Divider(color: Theme.of(context).dividerColor.withOpacity(0.1), thickness: 1)),
+    ],
   );
 
-  Widget _quickAction(BuildContext context, String emoji, String label, Color color, VoidCallback onTap) => Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color ?? (Theme.of(context).brightness == Brightness.dark ? AppTheme.darkCard : AppTheme.lightCard),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBorder : AppTheme.lightBorder),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(Theme.of(context).brightness == Brightness.dark ? 51 : 8),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+  // ── 1. Animated Daily Goal with Gradient ─────────────────────────────
+  Widget _buildAnimatedDailyGoal(BuildContext context, UserProfile profile) {
+    final theme = Theme.of(context);
+    final progress = (profile.practiceMinutes / profile.dailyGoalMinutes).clamp(0.0, 1.0);
+    final percentage = (progress * 100).toInt();
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 10))],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Daily Practice Goal', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18, color: Theme.of(context).colorScheme.primary.withOpacity(0.8))),
+                    const SizedBox(height: 4),
+                    Text('Keep the momentum going! 🔥', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
+              Text('$percentage%', style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 24)),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 20),
+          
+          // Gradient Progress Bar
+          Stack(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(38),
-                  shape: BoxShape.circle,
-                ),
-                child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                height: 12,
+                width: double.infinity,
+                decoration: BoxDecoration(color: theme.textTheme.titleSmall?.color?.withOpacity(0.05), borderRadius: BorderRadius.circular(99)),
               ),
-              const SizedBox(height: 8),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(label, style: GoogleFonts.outfit(color: Theme.of(context).textTheme.bodyLarge?.color, fontSize: 13, fontWeight: FontWeight.w800)),
+              LayoutBuilder(
+                builder: (context, constraints) => TweenAnimationBuilder<double>(
+                  duration: const Duration(seconds: 1),
+                  curve: Curves.easeOutCubic,
+                  tween: Tween<double>(begin: 0, end: progress),
+                  builder: (context, value, _) => Container(
+                    height: 12,
+                    width: constraints.maxWidth * value,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [theme.colorScheme.primary, theme.colorScheme.primary.withOpacity(0.7)]),
+                      borderRadius: BorderRadius.circular(99),
+                      boxShadow: [BoxShadow(color: theme.colorScheme.primary.withOpacity(0.3), blurRadius: 10)],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-
-  Widget _statCard(BuildContext context, String emoji, String label, String value, String unit, Color color) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Theme.of(context).cardTheme.color,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBorder : AppTheme.lightBorder),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withAlpha(Theme.of(context).brightness == Brightness.dark ? 51 : 8),
-          blurRadius: 8,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 16)),
-            Icon(Icons.auto_graph_rounded, color: color.withAlpha(128), size: 14),
-          ],
-        ),
-        const Spacer(),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(value, style: GoogleFonts.outfit(color: Theme.of(context).textTheme.headlineMedium?.color, fontWeight: FontWeight.w800, fontSize: 22, height: 1)),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '$label $unit'.toUpperCase(),
-          style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 0.5),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
-    ),
-  );
-
-  Widget _topicRow(BuildContext context, PracticeTopic t, int progress, VoidCallback onTap) {
-    final cardColor = Color(int.parse(t.colorHex, radix: 16));
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardTheme.color,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBorder : AppTheme.lightBorder),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: cardColor.withAlpha(20),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(t.emoji, style: const TextStyle(fontSize: 26)),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          
+          const SizedBox(height: 24),
+          
+          // CTA Button
+          SizedBox(
+            width: double.infinity,
+            height: 60,
+            child: ElevatedButton(
+              onPressed: () {
+                // Switch to Speaking Practice tab (index 1)
+                context.findAncestorStateOfType<_HomeScreenState>()?._onTabChanged(1);
+              },
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(t.title, style: GoogleFonts.outfit(color: Theme.of(context).textTheme.titleLarge?.color, fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: progress / 100,
-                      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                      valueColor: AlwaysStoppedAnimation(cardColor),
-                      minHeight: 6,
-                    ),
-                  ),
+                  const Icon(Icons.spa_rounded, size: 20), // Leaf icon like screenshot
+                  const SizedBox(width: 10),
+                  Text('Start Daily Practice', style: GoogleFonts.dmSans(fontWeight: FontWeight.w800, fontSize: 16)),
                 ],
               ),
             ),
-            const SizedBox(width: 20),
-            Text(
-              '$progress%',
-              style: GoogleFonts.outfit(color: cardColor, fontWeight: FontWeight.w800, fontSize: 14),
-            ),
+          ),
+        ],
+      ),
+    );
+  }
+  // ── 1.5 Quick Challenge Teaser ──────────────────────────────────────
+  Widget _buildQuickChallengeTeaser(BuildContext context, AppState state) {
+    final theme = Theme.of(context);
+    final completed = state.dailyChallenges.where((c) => c.completed).length;
+    final total = state.dailyChallenges.length;
+    final progress = total > 0 ? completed / total : 0.0;
+    
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyChallengeScreen())),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
+        ),
+        child: Row(children: [
+          Container(width: 48, height: 48,
+            decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(14)),
+            child: const Center(child: Text('⚡', style: TextStyle(fontSize: 22)))),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Daily Challenges', style: theme.textTheme.titleLarge?.copyWith(fontSize: 16)),
+            const SizedBox(height: 4),
+            Text('$completed of $total challenges complete', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+          ])),
+          SizedBox(width: 40, height: 40, child: Stack(alignment: Alignment.center, children: [
+            CircularProgressIndicator(value: progress, strokeWidth: 4, backgroundColor: theme.colorScheme.primary.withOpacity(0.05), valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary)),
+            Text('${(progress * 100).toInt()}%', style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 10)),
+          ])),
+          const SizedBox(width: 4),
+        ]),
+      ),
+    );
+  }
+
+  // ── 2. Stats Grid with Tints & Hierarchy ─────────────────────────────
+  Widget _buildStatsGrid(BuildContext context, UserProfile profile) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      childAspectRatio: 1.15,
+      children: [
+        _statCard(context, 'Streak', '${profile.streakDays}', Icons.local_fire_department_rounded, const Color(0xFFFFAB00)),
+        _statCard(context, 'Total XP', NumberFormat('#,###').format(profile.totalXP), Icons.stars_rounded, const Color(0xFF7C4DFF)),
+        _statCard(context, 'Badges', '${profile.badges.length}', Icons.emoji_events_rounded, const Color(0xFF00B0FF)),
+        _statCard(context, 'Sessions', '${profile.sessionsCompleted}', Icons.check_circle_rounded, const Color(0xFF00E676)),
+      ],
+    );
+  }
+
+  Widget _statCard(BuildContext context, String label, String value, IconData icon, Color tint) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: tint.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: tint, size: 22),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22)),
+              Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  // ── 2.5 Practice Grid ──────────────────────────────────────────────
+  Widget _buildPracticeGrid(BuildContext context) {
+    final theme = Theme.of(context);
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.4,
+      children: [
+        _practiceCard(context, 'Speak Blitz', '⚡', theme.colorScheme.primary, const ChallengesScreen()),
+        _practiceCard(context, 'Situations', '🎭', theme.colorScheme.secondary, const ScenarioScreen()),
+        _practiceCard(context, 'Resume Mode', '🚀', const Color(0xFF00E676), const ResumeModeScreen(), 
+            isHighlight: context.watch<AppState>().isResumeMode),
+        _practiceCard(context, 'Mock Interviews', '🎤', theme.colorScheme.primary, const InterviewScreen()),
+        _practiceCard(context, 'Group Discussion', '👥', const Color(0xFF00B0FF), const GDScreen()),
+        _practiceCard(context, 'Quiz Challenge', '🧠', const Color(0xFF7C4DFF), const QuizScreen()),
+      ],
+    );
+  }
+
+  Widget _practiceCard(BuildContext context, String title, String emoji, Color color, Widget screen, {bool isHighlight = false}) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => screen)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(24),
+          border: isHighlight ? Border.all(color: theme.colorScheme.primary, width: 2) : null,
+          boxShadow: [
+            if (isHighlight)
+              BoxShadow(color: theme.colorScheme.primary.withOpacity(0.2), blurRadius: 15)
+            else
+              BoxShadow(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
           ],
         ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+            child: Text(emoji, style: const TextStyle(fontSize: 18))),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontSize: 13, 
+              fontWeight: FontWeight.w800,
+              color: isHighlight ? theme.colorScheme.primary : null,
+            )),
+          ),
+        ]),
       ),
+    );
+  }
+
+  // ── 3. Word of the Day & Topics ──────────────────────────────────────
+  Widget _buildWordOfTheDay(BuildContext context, AppState state) {
+    final word = state.wordOfTheDay;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lightbulb_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
+              const SizedBox(width: 8),
+              Text('Word of the Day', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w900, fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(word.word, style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 28)),
+          ),
+          const SizedBox(height: 6),
+          Text(word.meaning, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5)),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VocabularyScreen())),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add to Vocabulary'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.primary,
+              side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopicsList(BuildContext context) {
+    final state = context.watch<AppState>();
+    final theme = Theme.of(context);
+    final role = state.profile.targetRole.toLowerCase();
+
+    // Create a copy and sort based on role relevance for a "real app" recommendation feel
+    final sortedTopics = List<PracticeTopic>.from(kPracticeTopics);
+    final activeResume = state.activeResume;
+    final resumeRole = activeResume?.roleTag?.toLowerCase() ?? '';
+    final resumeSkills = activeResume?.skills.map((s) => s.toLowerCase()).toList() ?? [];
+
+    sortedTopics.sort((a, b) {
+      if (state.isResumeMode && activeResume != null) {
+        // Boost topics that match the resume role or skills
+        bool aMatches = a.title.toLowerCase().contains(resumeRole) || 
+                         a.description.toLowerCase().contains(resumeRole) ||
+                         resumeSkills.any((s) => a.description.toLowerCase().contains(s));
+        bool bMatches = b.title.toLowerCase().contains(resumeRole) || 
+                         b.description.toLowerCase().contains(resumeRole) ||
+                         resumeSkills.any((s) => b.description.toLowerCase().contains(s));
+        
+        if (aMatches && !bMatches) return -1;
+        if (!aMatches && bMatches) return 1;
+      }
+
+      // Default prioritization (workplace/intro topics)
+      bool aRelevant = a.title.toLowerCase().contains('workplace') || 
+                       a.description.toLowerCase().contains('meeting') ||
+                       a.title.toLowerCase().contains('intro');
+      bool bRelevant = b.title.toLowerCase().contains('workplace') || 
+                       b.description.toLowerCase().contains('meeting') ||
+                       b.title.toLowerCase().contains('intro');
+      
+      if (aRelevant && !bRelevant) return -1;
+      if (!aRelevant && bRelevant) return 1;
+      return 0;
+    });
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: sortedTopics.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final topic = sortedTopics[index];
+        final color = Color(int.parse(topic.colorHex, radix: 16));
+        final progress = state.profile.topicProgress[topic.title] ?? 0;
+        
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [BoxShadow(color: theme.colorScheme.onSurface.withOpacity(0.02), blurRadius: 10)],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              width: 56, height: 56,
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(18)),
+              alignment: Alignment.center,
+              child: Text(topic.emoji, style: const TextStyle(fontSize: 26)),
+            ),
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(topic.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+                if (progress > 0)
+                  Text('$progress%', style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontWeight: FontWeight.w900, fontSize: 12)),
+              ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(topic.description, 
+                   style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: theme.textTheme.bodySmall?.color?.withOpacity(0.5))),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress / 100,
+                          minHeight: 6,
+                          backgroundColor: theme.colorScheme.primary.withOpacity(0.05),
+                          valueColor: AlwaysStoppedAnimation(progress == 100 ? Colors.green : theme.colorScheme.primary),
+                        ),
+                      ),
+                    ),
+                    if (progress == 100) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScenarioScreen())),
+          ),
+        );
+      },
     );
   }
 }

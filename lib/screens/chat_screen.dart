@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../services/speech_service.dart';
 import '../services/app_state.dart';
 import '../services/ai_feedback_service.dart';
 import '../theme/app_theme.dart';
@@ -18,8 +17,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _ctrl       = TextEditingController();
   final _scroll     = ScrollController();
-  final SpeechToText _speech = SpeechToText();
-  final FlutterTts   _tts    = FlutterTts();
+  final FlutterTts   _tts    = AppState.tts;
 
   bool _speechReady = false;
   bool _isListening = false;
@@ -38,15 +36,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initSpeech() async {
-    _speechReady = await _speech.initialize(
+    final speechService = context.read<SpeechService>();
+    _speechReady = await speechService.init(
       onError: (_) => setState(() => _isListening = false),
       onStatus: (s) { if (s == 'done' || s == 'notListening') setState(() => _isListening = false); },
     );
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
-    await _tts.setSpeechRate(0.5);
+    final state = context.read<AppState>();
+    await AppState.configureTts(_tts, state);
   }
 
   void _addWelcome() {
@@ -74,35 +73,36 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final reply = await AIFeedbackService.respondToSpeech(
         userText: text, context: 'chat', personalityMode: personalityMode,
+        difficulty: state.profile.difficulty,
       );
+      if (!mounted) return;
       state.addMessage(reply);
       state.addXP(reply.xp);
       state.incrementSessions();
       await _tts.speak(reply.text);
     } catch (e) {
-      state.addMessage(ChatMessage(id: DateTime.now().toIso8601String(),
-        text: '⚠️ Could not get AI feedback. Please try again.', sender: MsgSender.ai));
+      if (mounted) {
+        state.addMessage(ChatMessage(id: DateTime.now().toIso8601String(),
+          text: '⚠️ Could not get AI feedback. Please try again.', sender: MsgSender.ai));
+      }
     }
 
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
     _scrollDown();
   }
 
   Future<void> _startVoice() async {
     if (!_speechReady) return;
     setState(() { _isListening = true; _liveText = ''; });
-    await _speech.listen(
-      onResult: (r) {
-        setState(() => _liveText = r.recognizedWords);
-        if (r.finalResult && r.recognizedWords.isNotEmpty) {
-          _speech.stop();
-          setState(() => _isListening = false);
-          _send(r.recognizedWords);
-        }
+    final speechService = context.read<SpeechService>();
+    await speechService.listen(
+      onResult: (text, isFinal) {
+        if (mounted) setState(() => _liveText = text);
       },
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 3),
-      partialResults: true, localeId: 'en_US',
+      partialResults: true,
+      localeId: 'en_US',
     );
   }
 
@@ -115,32 +115,32 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
-  void dispose() { _ctrl.dispose(); _scroll.dispose(); _speech.stop(); _tts.stop(); super.dispose(); }
+  void dispose() { _ctrl.dispose(); _scroll.dispose(); context.read<SpeechService>().stop(); _tts.stop(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final messages = state.chatMessages;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('AI Chat Coach 💬'),
         actions: [
-          // Personality mode indicator
           GestureDetector(
             onTap: () => _showPersonalityPicker(context, state),
             child: Container(
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.secondary.withOpacity(0.12),
+                color: theme.colorScheme.secondary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: AppTheme.secondary.withOpacity(0.3)),
+                border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
               ),
               child: Text(
                 '${_personalityEmoji(state.profile.personalityMode)} ${state.profile.personalityMode[0].toUpperCase()}${state.profile.personalityMode.substring(1)}',
-                style: GoogleFonts.dmSans(color: AppTheme.secondary, fontSize: 11, fontWeight: FontWeight.w600),
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 10),
               ),
             ),
           ),
@@ -148,14 +148,12 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       body: Column(children: [
-        // Messages
         Expanded(child: ListView.builder(
           controller: _scroll, padding: const EdgeInsets.all(16),
           itemCount: messages.length,
           itemBuilder: (_, i) => _buildMsg(messages[i], i),
         )),
 
-        // Live speech text
         if (_isListening && _liveText.isNotEmpty)
           Container(
             width: double.infinity, padding: const EdgeInsets.all(12), margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -164,28 +162,30 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Row(children: [
               const Icon(Icons.mic, color: AppTheme.danger, size: 16),
               const SizedBox(width: 8),
-              Expanded(child: Text(_liveText, style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 13))),
+              Expanded(child: Text(_liveText, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
             ]),
           ),
 
-        if (_loading) const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)),
+        if (_loading) const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)),
 
-        // Input bar
         Container(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          decoration: const BoxDecoration(color: AppTheme.darkCard, border: Border(top: BorderSide(color: AppTheme.darkBorder))),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.secondary.withOpacity(0.05),
+            border: Border(top: BorderSide(color: theme.dividerColor.withOpacity(0.1))),
+          ),
           child: SafeArea(child: Row(children: [
             GestureDetector(
-              onTap: () => _isListening ? _speech.stop() : _startVoice(),
+              onTap: () => _isListening ? context.read<SpeechService>().stop() : _startVoice(),
               child: Container(width: 44, height: 44,
                 decoration: BoxDecoration(shape: BoxShape.circle,
-                  color: _isListening ? AppTheme.danger.withOpacity(0.15) : AppTheme.darkSurface,
-                  border: Border.all(color: _isListening ? AppTheme.danger : AppTheme.darkBorder)),
-                child: Icon(_isListening ? Icons.stop : Icons.mic, color: _isListening ? AppTheme.danger : Colors.white54, size: 20)),
+                  color: _isListening ? AppTheme.danger.withOpacity(0.15) : theme.inputDecorationTheme.fillColor,
+                  border: Border.all(color: _isListening ? AppTheme.danger : theme.dividerColor.withOpacity(0.1))),
+                child: Icon(_isListening ? Icons.stop : Icons.mic, color: _isListening ? AppTheme.danger : theme.colorScheme.primary, size: 20)),
             ),
             const SizedBox(width: 8),
             Expanded(child: TextField(
-              controller: _ctrl, style: const TextStyle(color: Colors.white, fontSize: 14),
+              controller: _ctrl, style: theme.textTheme.bodyMedium,
               onSubmitted: (_) => _send(),
               decoration: InputDecoration(
                 hintText: _isListening ? '🎤 Listening...' : 'Type a message...',
@@ -194,8 +194,11 @@ class _ChatScreenState extends State<ChatScreen> {
             const SizedBox(width: 8),
             GestureDetector(onTap: () => _send(),
               child: Container(width: 44, height: 44,
-                decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [AppTheme.primary, AppTheme.secondary])),
-                child: const Icon(Icons.send_rounded, color: Colors.white, size: 18))),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [theme.colorScheme.primary, theme.colorScheme.secondary]),
+                ),
+                child: Icon(Icons.send_rounded, color: theme.colorScheme.onPrimary, size: 18))),
           ])),
         ),
       ]),
@@ -204,38 +207,73 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildMsg(ChatMessage msg, int index) {
     final isUser = msg.sender == MsgSender.user;
+    final theme = Theme.of(context);
+    
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isUser ? AppTheme.primary.withOpacity(0.12) : AppTheme.darkCard,
+          color: isUser ? theme.colorScheme.primary.withOpacity(0.12) : theme.cardColor,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16), topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isUser ? 16 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 16)),
-          border: Border.all(color: isUser ? AppTheme.primary.withOpacity(0.25) : AppTheme.darkBorder),
+            topLeft: const Radius.circular(20), topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(isUser ? 20 : 4),
+            bottomRight: Radius.circular(isUser ? 4 : 20)),
+          border: Border.all(color: isUser ? theme.colorScheme.primary.withOpacity(0.1) : theme.dividerColor.withOpacity(0.1)),
+          boxShadow: [
+            if (!isUser) BoxShadow(color: theme.colorScheme.onSurface.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))
+          ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(msg.text, style: GoogleFonts.dmSans(color: Colors.white, fontSize: 14, height: 1.5)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Text(msg.text, style: theme.textTheme.bodyMedium?.copyWith(height: 1.5, fontWeight: isUser ? FontWeight.w600 : FontWeight.w500))),
+              if (!isUser && context.read<AppState>().profile.language != 'none')
+                GestureDetector(
+                  onTap: () => context.read<AppState>().translateMessage(msg.id),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8, bottom: 4),
+                    child: Icon(Icons.translate_rounded, color: theme.colorScheme.primary.withOpacity(0.6), size: 16),
+                  ),
+                ),
+            ],
+          ),
+          if (msg.translatedText != null && msg.translatedText!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(0.06), borderRadius: BorderRadius.circular(10)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('TRANSLATION', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w900, fontSize: 9, letterSpacing: 0.5)),
+                  const SizedBox(height: 4),
+                  Text(msg.translatedText!, style: theme.textTheme.bodySmall?.copyWith(fontSize: 12, fontStyle: FontStyle.italic)),
+                ],
+              ),
+            ),
+          ],
           if (msg.feedback != null && msg.feedback!.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: AppTheme.accent.withOpacity(0.06), borderRadius: BorderRadius.circular(8)),
-              child: Text(msg.feedback!, style: GoogleFonts.dmSans(color: Colors.white60, fontSize: 12, height: 1.5)),
+              width: double.infinity,
+              decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(0.06), borderRadius: BorderRadius.circular(10)),
+              child: Text(msg.feedback!, style: theme.textTheme.bodySmall?.copyWith(fontSize: 12, color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
             ),
           ],
           if (msg.score != null || msg.xp > 0) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(children: [
-              if (msg.score != null) Text('${msg.score!.toStringAsFixed(1)}/10', style: GoogleFonts.dmSans(
-                color: msg.score! >= 8 ? AppTheme.primary : msg.score! >= 6 ? AppTheme.accent : AppTheme.danger,
-                fontWeight: FontWeight.w700, fontSize: 12)),
+              if (msg.score != null) Text('${msg.score!.toStringAsFixed(1)}/10', style: theme.textTheme.bodySmall?.copyWith(
+                color: msg.score! >= 8 ? theme.colorScheme.primary : msg.score! >= 6 ? theme.colorScheme.primary : theme.colorScheme.error,
+                fontWeight: FontWeight.w900, fontSize: 11)),
               const Spacer(),
-              if (msg.xp > 0) Text('+${msg.xp} XP ⭐', style: GoogleFonts.dmSans(color: AppTheme.accent, fontWeight: FontWeight.w600, fontSize: 11)),
+              if (msg.xp > 0) Text('+${msg.xp} XP ⭐', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 10)),
             ]),
           ],
         ]),
@@ -247,15 +285,18 @@ class _ChatScreenState extends State<ChatScreen> {
     {'friendly': '😊', 'strict': '👨‍🏫', 'hr': '👔', 'debate': '🤺'}[mode] ?? '🤖';
 
   void _showPersonalityPicker(BuildContext context, AppState state) {
-    showModalBottomSheet(context: context, backgroundColor: AppTheme.darkCard,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+    final theme = Theme.of(context);
+    showModalBottomSheet(context: context, backgroundColor: theme.scaffoldBackgroundColor,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+      builder: (_) => SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.1), borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 24),
+          Text('AI Personality', style: theme.textTheme.titleLarge),
           const SizedBox(height: 16),
-          Text('AI Personality', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
-          const SizedBox(height: 12),
           ...AIFeedbackService.personalityDescriptions.entries.map((e) {
             final mode = e.key;
             final selected = state.profile.personalityMode == mode;
@@ -263,14 +304,15 @@ class _ChatScreenState extends State<ChatScreen> {
               contentPadding: EdgeInsets.zero,
               leading: Text(_personalityEmoji(mode), style: const TextStyle(fontSize: 24)),
               title: Text('${mode[0].toUpperCase()}${mode.substring(1)} Coach',
-                style: GoogleFonts.dmSans(color: selected ? AppTheme.secondary : Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: Text(e.value, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 12)),
-              trailing: selected ? const Icon(Icons.check_circle, color: AppTheme.secondary) : null,
+                style: theme.textTheme.titleSmall?.copyWith(color: selected ? theme.colorScheme.primary : theme.textTheme.bodyLarge?.color, fontWeight: selected ? FontWeight.w900 : FontWeight.w600)),
+              subtitle: Text(e.value, style: theme.textTheme.bodySmall),
+              trailing: selected ? Icon(Icons.check_circle, color: theme.colorScheme.primary) : null,
               onTap: () { state.setPersonalityMode(mode); Navigator.pop(context); },
             );
           }),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
         ]),
+      ),
       ),
     );
   }

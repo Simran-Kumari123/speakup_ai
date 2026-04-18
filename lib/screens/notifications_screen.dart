@@ -40,17 +40,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final picked = await showTimePicker(
       context: context,
       initialTime: _selectedTime,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(primary: AppTheme.primary, surface: AppTheme.darkCard),
-        ),
-        child: child!,
-      ),
+      builder: (ctx, child) {
+        final theme = Theme.of(ctx);
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(primary: theme.colorScheme.primary, surface: theme.cardColor),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() => _selectedTime = picked);
       final state = context.read<AppState>();
-      state.setReminderTime('${picked.hour.toString().padLeft(2, "0")}:${picked.minute.toString().padLeft(2, "0")}');
+      state.setReminderTime(picked.hour, picked.minute);
       if (state.notificationsOn) await _saveReminder();
     }
   }
@@ -66,17 +69,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
       await _loadPending();
       if (mounted) {
+        final theme = Theme.of(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('✅ Reminder set for ${_selectedTime.format(context)}!'),
-          backgroundColor: AppTheme.primary,
+          backgroundColor: theme.colorScheme.primary,
           behavior: SnackBarBehavior.floating,
         ));
       }
     } catch (e) {
       if (mounted) {
+        final theme = Theme.of(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Error: $e'),
-          backgroundColor: AppTheme.danger,
+          backgroundColor: theme.colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -112,9 +117,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Notifications 🔔')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -125,12 +131,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: [
-                (state.notificationsOn ? AppTheme.primary : Colors.grey).withOpacity(0.15),
-                AppTheme.darkCard,
+                (state.notificationsOn ? theme.colorScheme.primary : theme.disabledColor).withOpacity(0.08),
+                theme.cardColor,
               ]),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: (state.notificationsOn ? AppTheme.primary : Colors.grey).withOpacity(0.3),
+                color: (state.notificationsOn ? theme.colorScheme.primary : theme.disabledColor).withOpacity(0.15),
               ),
             ),
             child: Row(children: [
@@ -139,18 +145,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
                   state.notificationsOn ? 'Notifications ON' : 'Notifications OFF',
-                  style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+                  style: GoogleFonts.dmSans(color: theme.textTheme.titleMedium?.color, fontWeight: FontWeight.w900, fontSize: 16),
                 ),
                 Text(
                   state.notificationsOn
                       ? 'You\'ll get daily reminders at ${state.reminderTime}'
                       : 'Enable to get daily practice reminders',
-                  style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 12),
+                  style: GoogleFonts.dmSans(color: theme.textTheme.bodySmall?.color?.withOpacity(0.6), fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ])),
               Switch(
                 value: state.notificationsOn,
-                activeColor: AppTheme.primary,
+                activeThumbColor: theme.colorScheme.primary,
                 onChanged: (val) async {
                   state.toggleNotifications(val);
                   if (val) {
@@ -173,36 +179,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.darkBorder),
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: theme.dividerColor.withOpacity(0.05)),
               ),
               child: Row(children: [
                 Container(
                   width: 48, height: 48,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.primary.withOpacity(0.12),
+                    color: theme.colorScheme.primary.withOpacity(0.12),
                   ),
-                  child: const Icon(Icons.access_time_rounded, color: AppTheme.primary),
+                  child: Icon(Icons.access_time_rounded, color: theme.colorScheme.primary),
                 ),
                 const SizedBox(width: 16),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Reminder Time', style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 12)),
+                  Text('Reminder Time', style: GoogleFonts.dmSans(color: theme.textTheme.bodySmall?.color?.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.bold)),
                   Text(
                     _selectedTime.format(context),
-                    style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22),
+                    style: GoogleFonts.dmSans(color: theme.textTheme.titleLarge?.color, fontWeight: FontWeight.w900, fontSize: 24),
                   ),
                 ])),
                 if (state.notificationsOn)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.12),
+                      color: theme.colorScheme.primary.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                      border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
                     ),
-                    child: Text('Change', style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.w600)),
+                    child: Text('Change', style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w600)),
                   ),
               ]),
             ),
@@ -216,7 +222,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 icon: _loading
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.darkBg))
+                    ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.onPrimary))
                     : const Icon(Icons.alarm_on_rounded, size: 18),
                 label: Text(_loading ? 'Saving...' : 'Save Reminder'),
                 onPressed: _loading ? null : _saveReminder,
@@ -233,7 +239,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             _NotifType(emoji: '🔥', title: 'Streak Alert',             subtitle: 'Warns when your streak is at risk',          active: state.notificationsOn),
             _NotifType(emoji: '🏅', title: 'Achievement Unlocked',     subtitle: 'Celebrates when you earn a badge',           active: state.notificationsOn),
             _NotifType(emoji: '⭐', title: 'XP Milestone',             subtitle: 'Notifies on 100, 500, 1000 XP milestones',   active: state.notificationsOn),
-          ].map((n) => _notifTypeCard(n)),
+          ].map((n) => _notifTypeCard(n, context)),
 
           const SizedBox(height: 28),
           _sectionTitle('Test & Status'),
@@ -243,14 +249,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.darkCard,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.darkBorder),
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: theme.dividerColor.withOpacity(0.05)),
             ),
             child: Row(children: [
               const Icon(Icons.pending_actions_rounded, color: AppTheme.secondary, size: 20),
               const SizedBox(width: 12),
-              Text('Scheduled notifications', style: GoogleFonts.dmSans(color: Colors.white, fontSize: 14)),
+              Text('Scheduled notifications', style: GoogleFonts.dmSans(color: theme.textTheme.bodyMedium?.color, fontWeight: FontWeight.w600, fontSize: 14)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -288,16 +294,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.accent.withOpacity(0.2)),
+              color: AppTheme.earthyAccent.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.earthyAccent.withOpacity(0.1)),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('💡 Tips', style: GoogleFonts.dmSans(color: AppTheme.accent, fontWeight: FontWeight.w700, fontSize: 13)),
-              const SizedBox(height: 10),
-              _tip('Set a reminder for a time you\'re free — morning or evening works best'),
-              _tip('Consistency beats intensity — even 10 minutes daily builds fluency'),
-              _tip('If you miss a day, just restart — don\'t give up!'),
+              Text('💡 Tips', style: GoogleFonts.dmSans(color: AppTheme.earthyAccent, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1)),
+              const SizedBox(height: 12),
+              _tip('Set a reminder for a time you\'re free — morning or evening works best', context),
+              _tip('Consistency beats intensity — even 10 minutes daily builds fluency', context),
+              _tip('If you miss a day, just restart — don\'t give up!', context),
             ]),
           ),
 
@@ -308,33 +314,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _sectionTitle(String t) =>
-      Text(t.toUpperCase(), style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1));
+      Text(t.toUpperCase(), style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1));
 
-  Widget _notifTypeCard(_NotifType n) => Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    decoration: BoxDecoration(
-      color: AppTheme.darkCard,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: AppTheme.darkBorder),
-    ),
-    child: Row(children: [
-      Text(n.emoji, style: const TextStyle(fontSize: 22)),
-      const SizedBox(width: 14),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(n.title, style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-        Text(n.subtitle, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 11)),
-      ])),
-      Icon(n.active ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-          color: n.active ? AppTheme.primary : Colors.white24, size: 20),
-    ]),
-  );
+  Widget _notifTypeCard(_NotifType n, BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.05)),
+      ),
+      child: Row(children: [
+        Text(n.emoji, style: const TextStyle(fontSize: 22)),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(n.title, style: GoogleFonts.dmSans(color: theme.textTheme.bodyMedium?.color, fontWeight: FontWeight.w700, fontSize: 14)),
+          Text(n.subtitle, style: GoogleFonts.dmSans(color: theme.textTheme.bodySmall?.color?.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w500)),
+        ])),
+        Icon(n.active ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            color: n.active ? AppTheme.primary : theme.dividerColor.withOpacity(0.2), size: 20),
+      ]),
+    );
+  }
 
-  Widget _tip(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
+  Widget _tip(String text, BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('• ', style: TextStyle(color: AppTheme.accent)),
-      Expanded(child: Text(text, style: GoogleFonts.dmSans(color: Colors.white60, fontSize: 12, height: 1.4))),
+      Icon(Icons.circle, color: theme.colorScheme.primary, size: 8),
+      const SizedBox(width: 12),
+      Expanded(child: Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7), fontSize: 12, height: 1.5, fontWeight: FontWeight.w500))),
     ]),
   );
 }

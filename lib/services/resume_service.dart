@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'ai_feedback_service.dart';
+import '../models/models.dart';
 
 /// Service for PDF resume analysis
 class ResumeService {
@@ -20,12 +21,28 @@ class ResumeService {
 
       final text = textBuffer.toString().trim();
       if (text.isEmpty) {
-        throw Exception('No text found in PDF. The PDF may contain only images.');
+        throw Exception('We couldn\'t find any readable text in this PDF. Please ensure it\'s not a scanned image.');
       }
       return text;
     } catch (e) {
-      throw Exception('Failed to extract text from PDF: $e');
+      if (e.toString().contains('scanned image')) rethrow;
+      throw Exception('Failed to read PDF. Please ensure the file is not corrupted.');
     }
+  }
+
+  /// Heuristic check if text looks like a resume
+  static bool isLikelyResume(String text) {
+    final t = text.toLowerCase();
+    final indicators = [
+      'experience', 'work', 'education', 'skills', 'summary', 
+      'projects', 'contact', 'objective', 'professional', 'curriculum vitae'
+    ];
+    int score = 0;
+    for (var ind in indicators) {
+      if (t.contains(ind)) score++;
+    }
+    // At least 3 standard resume sections usually exist
+    return score >= 3;
   }
 
   /// Analyze resume using AI
@@ -34,13 +51,15 @@ class ResumeService {
   }
 
   /// Generate interview questions based on resume
-  static Future<List<Map<String, dynamic>>> generateQuestions({
-    required String skills,
-    required String experienceLevel,
-    required String category,
+  static Future<List<Question>> generateQuestions({
+    String? resumeText,
+    String? skills,
+    String? experienceLevel,
+    String? category,
     int count = 5,
   }) async {
     return AIFeedbackService.generateResumeQuestions(
+      resumeText: resumeText,
       skills: skills,
       experienceLevel: experienceLevel,
       category: category,

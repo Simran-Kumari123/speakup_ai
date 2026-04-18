@@ -1,14 +1,11 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter/foundation.dart';
-
-import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+
 import '../models/models.dart';
 import '../services/app_state.dart';
 import '../services/ai_feedback_service.dart';
@@ -16,14 +13,13 @@ import '../services/question_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connectivity_banner.dart';
 import '../widgets/question_card.dart';
-import '../widgets/selector_widgets.dart';
 import '../widgets/ai_error_widget.dart';
 import '../widgets/ai_loading_widget.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/voice_wave.dart';
 import '../widgets/confidence_meter.dart';
 import 'gd_screen.dart';
-import 'dart:ui';
+import '../services/speech_service.dart';
 
 class SpeakingScreen extends StatefulWidget {
   final PracticeTopic? topic;
@@ -36,13 +32,13 @@ class SpeakingScreen extends StatefulWidget {
 }
 
 class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStateMixin {
-  final SpeechToText _speech = SpeechToText();
-  final FlutterTts _tts = FlutterTts();
+  final FlutterTts _tts = AppState.tts;
   late QuestionService _questionService;
 
   bool _speechAvailable = false;
   bool _isListening = false;
   bool _processing = false;
+  bool _isStopping = false; // Add guard
   String _spokenText = '';
   String _liveText = '';
   String _errorMessage = '';
@@ -59,10 +55,8 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
-      ..repeat(reverse: true);
-    _pulseAnim = Tween(begin: 1.0, end: 1.3).animate(
-        CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
+    _pulseAnim = Tween(begin: 1.0, end: 1.15).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
     _questionService = QuestionService();
 
@@ -73,40 +67,35 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
     if (widget.question != null) {
       _currentQuestion = widget.question;
     } else {
-      _generateNewQuestion();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _generateNewQuestion(useAI: true);
+      });
     }
     _initSpeech();
     _initTts();
   }
 
   Future<void> _initSpeech() async {
-    if (!kIsWeb) {
-      final status = await Permission.microphone.status;
-      if (!status.isGranted) {
-        final result = await Permission.microphone.request();
-        if (!result.isGranted) {
-          _showError('Microphone permission denied.');
-          return;
+    final speechService = context.read<SpeechService>();
+    _speechAvailable = await speechService.init(
+      onError: (e) {
+        if (e.errorMsg != 'error_no_match' && e.errorMsg != 'error_speech_timeout') {
+          _showError(SpeechService.getFriendlyError(e));
         }
-      }
-    }
-
-    _speechAvailable = await _speech.initialize(
-      onError: (e) => _showError('Mic error: ${e.errorMsg}'),
+        if (_isListening) _stopListening();
+      },
       onStatus: (status) {
         if ((status == 'done' || status == 'notListening') && _isListening) {
           _stopListening();
         }
       },
     );
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
     final state = context.read<AppState>();
-    final speed = {'slow': 0.35, 'normal': 0.5, 'fast': 0.65}[state.profile.voicePreference] ?? 0.5;
-    await _tts.setSpeechRate(speed);
+    await AppState.configureTts(_tts, state);
   }
 
   Future<void> _startListening() async {
@@ -114,46 +103,69 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
       _showError('Microphone not available.');
       return;
     }
-    setState(() { _isListening = true; _liveText = ''; _spokenText = ''; _feedback = null; });
+    setState(() {
+      _isListening = true;
+      _isStopping = false; // Reset guard
+      _liveText = '';
+      _spokenText = '';
+      _feedback = null;
+    });
 
-    await _speech.listen(
-      onResult: (r) {
-        setState(() => _recognizedText = r.recognizedWords);
-        if (r.finalResult && r.recognizedWords.isNotEmpty) {
-          _stopListening(autoSubmit: true);
+    final speechService = context.read<SpeechService>();
+    await speechService.listen(
+      onResult: (text, isFinal) {
+        if (mounted) {
+          setState(() => _liveText = text);
+          if (isFinal && text.trim().isNotEmpty) {
+            _stopListening();
+          }
         }
       },
       listenFor: const Duration(seconds: 60),
-      pauseFor: const Duration(seconds: 4),
-      partialResults: true, localeId: 'en_US',
+      pauseFor: const Duration(seconds: 5),
+      partialResults: true,
+      onSoundLevelChange: (level) {
+        if (mounted) setState(() => _soundLevel = level);
+      },
     );
   }
 
   Future<void> _stopListening() async {
-    if (_speech.isListening) {
-      await _speech.stop();
-    }
-    setState(() => _isListening = false);
+    if (_isStopping) return; // Guard against double calls
+    _isStopping = true;
+
+    final speechService = context.read<SpeechService>();
+    if (speechService.isListening) await speechService.stop();
     
+    if (!mounted) return;
+    setState(() => _isListening = false);
+
     if (_liveText.trim().isNotEmpty && !_processing) {
-      setState(() { 
-        _spokenText = _liveText; 
-        _processing = true; 
-        _liveText = ''; 
+      setState(() {
+        _spokenText = _liveText;
+        _processing = true;
+        _liveText = '';
       });
       await _processVoice();
     }
   }
 
-  void _onSpeechResult(SpeechRecognitionResult result) {
-    setState(() => _liveText = result.recognizedWords);
-    if (result.finalResult && result.recognizedWords.isNotEmpty && !_processing) {
-      _stopListening();
+  Future<void> _processVoice() async {
+    if (_spokenText.isEmpty) {
+      setState(() => _processing = false);
+      return;
     }
-  }
-
     try {
       final state = context.read<AppState>();
+      final fb = await AIFeedbackService.respondToSpeech(
+        userText: _spokenText,
+        personalityMode: state.profile.personalityMode,
+        difficulty: state.profile.difficulty,
+        context: 'chat',
+      );
+
+      if (!mounted) return;
+
       state.addXP(fb.xp);
       state.addWordsSpoken(_spokenText.split(' ').length);
       state.addPracticeMinutes(1);
@@ -161,59 +173,72 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         topic: _currentQuestion?.text ?? 'Speaking Practice',
         type: 'Speaking',
-        score: fb.score ?? 0.0,
+        score: fb.score ?? 7.5,
         xp: fb.xp,
-        topicId: widget.topic?.id,
       ));
-      setState(() { _feedback = fb; _processing = false; });
+
+      setState(() {
+        _feedback = fb;
+        _processing = false;
+      });
       _showFeedbackModal(fb);
     } catch (e) {
-      if (!mounted) return;
-      setState(() { _errorMessage = e.toString(); _processing = false; });
+      setState(() {
+        _errorMessage = 'Connection lost. Please try again.';
+        _processing = false;
+      });
     }
   }
 
   void _showFeedbackModal(ChatMessage fb) {
+    final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
           decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color?.withValues(alpha: 0.9),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.textSecondary.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.1), borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                child: Text('AI ANALYSIS', style: GoogleFonts.outfit(fontWeight: FontWeight.w900, color: theme.colorScheme.primary, letterSpacing: 1.5, fontSize: 11)),
+              ),
               const SizedBox(height: 24),
-              Text('ANALYSIS COMPLETE', style: GoogleFonts.outfit(color: AppTheme.primary, fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 1.5)),
-              const SizedBox(height: 16),
               ConfidenceMeter(score: fb.score ?? 7.5),
-              const SizedBox(height: 16),
-              Text(fb.text, textAlign: TextAlign.center, style: GoogleFonts.outfit(fontSize: 16, height: 1.5)),
               const SizedBox(height: 24),
-              if (fb.feedback != null)
+              Text(fb.text, textAlign: TextAlign.center, style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, fontSize: 18, height: 1.4)),
+              if (fb.feedback != null && fb.feedback!.isNotEmpty) ...[
+                const SizedBox(height: 20),
                 Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(16)),
-                  child: Text(fb.feedback!, style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 14)),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: theme.dividerColor.withOpacity(0.05))),
+                  child: Text(fb.feedback!, style: GoogleFonts.dmSans(fontSize: 14, height: 1.6, color: Colors.black.withOpacity(0.7))),
                 ),
+              ],
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  child: Text('CONTINUE PRACTICE', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    backgroundColor: theme.colorScheme.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: const Text('CONTINUE PRACTICE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                 ),
               ),
-              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -223,290 +248,215 @@ class _SpeakingScreenState extends State<SpeakingScreen> with TickerProviderStat
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppTheme.danger, behavior: SnackBarBehavior.floating));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
   }
 
-  @override
-  void dispose() {
-    _pulseCtrl.dispose();
-    _speech.stop();
-    _tts.stop();
-    super.dispose();
+  Future<void> _generateNewQuestion({bool useAI = false}) async {
+    final state = context.read<AppState>();
+    if (useAI) {
+      final q = await state.generateDynamicQuestion(category: _selectedCategory, difficulty: _selectedDifficulty);
+      if (q != null && mounted) {
+        setState(() => _currentQuestion = q);
+        return;
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _currentQuestion = _questionService.getRandomQuestion(type: 'speaking', category: _selectedCategory, difficulty: _selectedDifficulty);
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final state = context.watch<AppState>();
+
     return ConnectivityBanner(
       child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          title: Text(
-            widget.topic != null ? '${widget.topic!.title} Practice' : 'Speaking Practice',
-          ),
+          title: Text('Speaking Practice', style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 18)),
           actions: [
             IconButton(
-              icon: const Icon(Icons.shuffle_rounded),
-              onPressed: _generateNewQuestion,
-              tooltip: 'New Question',
+              icon: state.isGeneratingQuestion 
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(Icons.auto_fix_high_rounded, color: theme.colorScheme.primary),
+              onPressed: () => _generateNewQuestion(useAI: true),
+              tooltip: 'Career-Aware Generation',
             ),
             const SizedBox(width: 8),
           ],
         ),
         body: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: ResponsiveContainer(
-            padding: const EdgeInsets.all(20),
-            child: Column(children: [
-            CategorySelector(
-              categories: _getCategories(),
-              selectedCategory: _selectedCategory,
-              onChanged: (category) {
-                setState(() => _selectedCategory = category);
-                _generateNewQuestion();
-              },
-            ),
-            const SizedBox(height: 16),
-            DifficultySelector(
-              selectedDifficulty: _selectedDifficulty,
-              onChanged: (difficulty) {
-                setState(() => _selectedDifficulty = difficulty);
-                _generateNewQuestion();
-              },
-            ),
-            const SizedBox(height: 24),
-
-            // AI Group Simulation Launch Button (Integrated)
-            if (_selectedCategory == 'Group Discussion')
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              _buildModernSelectors(theme),
+              const SizedBox(height: 24),
               Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.secondary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          const Text('🗣️', style: TextStyle(fontSize: 24)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('AI Group Simulation', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 16)),
-                                Text('Practice with 4 virtual participants in a real-time GD round.', style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 12)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: state.isGeneratingQuestion
+                    ? Container(
+                        height: 260,
                         width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GDScreen())),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.secondary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text('LAUNCH SIMULATION', style: TextStyle(fontWeight: FontWeight.bold)),
+                        decoration: BoxDecoration(
+                          color: theme.cardColor.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: theme.dividerColor.withOpacity(0.05)),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ).animate().fadeIn().slideX(),
-
-            if (_currentQuestion != null)
-              SizedBox(
-                height: 380, // Fixed height for swipe area
-                child: PageView.builder(
-                  onPageChanged: (_) => _generateNewQuestion(),
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: QuestionCard(
-                        question: _currentQuestion!,
-                        onRefresh: _generateNewQuestion,
-                      ),
-                    );
-                  },
-                ),
-              )
-            else
-              const Center(child: CircularProgressIndicator()),
-
-            const SizedBox(height: 32),
-
-            Text(
-              !_speechAvailable  ? '⚠️ Microphone not available'
-                  : _isListening   ? '🔴 Listening... tap to stop'
-                  : _processing    ? '⚙️  Analyzing your speech...'
-                  : _feedback != null ? '✅ Done! Great job!'
-                  : 'Tap the mic and start speaking',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: _isListening ? AppTheme.danger : _processing ? AppTheme.accent : AppTheme.textSecondary,
+                        child: const Center(child: CircularProgressIndicator()),
+                      )
+                    : _currentQuestion != null
+                        ? QuestionCard(question: _currentQuestion!, onRefresh: () => _generateNewQuestion(useAI: true))
+                        : const SizedBox(height: 240, child: Center(child: CircularProgressIndicator())),
               ),
-            ).animate(target: _isListening ? 1 : 0).shimmer(duration: 1200.ms),
+              const SizedBox(height: 32),
+              _buildMicOrb(theme),
+              const SizedBox(height: 32),
+              _buildLiveTranscript(theme),
+              const SizedBox(height: 120),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            const SizedBox(height: 20),
+  Widget _buildModernSelectors(ThemeData theme) {
+    final cats = ['All', 'Career', 'Education', 'Lifestyle', 'Technical'];
+    final diffs = ['Beginner', 'Intermediate', 'Advanced'];
 
-            GestureDetector(
-              onTap: () {
-                if (!_speechAvailable || _processing) return;
-                _isListening ? _stopListening() : _startListening();
-              },
-              child: AnimatedBuilder(
-                animation: _pulseAnim,
-                builder: (_, __) => Transform.scale(
+    return Column(
+      children: [
+        _horizontalChipList(cats, _selectedCategory ?? 'All', (val) {
+          setState(() => _selectedCategory = val == 'All' ? null : val);
+          _generateNewQuestion(useAI: true);
+        }),
+        const SizedBox(height: 12),
+        _horizontalChipList(diffs, _selectedDifficulty ?? 'Intermediate', (val) {
+          setState(() => _selectedDifficulty = val);
+          _generateNewQuestion(useAI: true);
+        }),
+      ],
+    );
+  }
+
+  Widget _horizontalChipList(List<String> items, String selected, Function(String) onSelect) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: items.map((item) {
+          final isSelected = item == selected;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(item, style: GoogleFonts.outfit(fontSize: 12, fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700)),
+              selected: isSelected,
+              onSelected: (_) => onSelect(item),
+              backgroundColor: Colors.white,
+              selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+              checkmarkColor: Theme.of(context).colorScheme.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black12)),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildMicOrb(ThemeData theme) {
+    return Center(
+      child: Column(
+        children: [
+          Text(
+            _isListening ? 'LISTENING NOW' : _processing ? 'COACH IS ANALYZING' : 'READY TO PRACTICE',
+            style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5)),
+          ),
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: () {
+              if (_processing || _isStopping) return;
+              _isListening ? _stopListening() : _startListening();
+            },
+            child: AnimatedBuilder(
+              animation: _pulseAnim,
+              builder: (ctx, child) => Container(
+                width: 120, height: 120,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _isListening ? Colors.red.withOpacity(0.3) : theme.colorScheme.primary.withOpacity(0.2), width: 2),
+                ),
+                child: Transform.scale(
                   scale: _isListening ? _pulseAnim.value : 1.0,
                   child: Container(
-                    width: 100, height: 100,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _isListening   ? AppTheme.danger.withValues(alpha: 0.1)
-                          : _processing  ? AppTheme.accent.withValues(alpha: 0.1)
-                          : AppTheme.primary.withValues(alpha: 0.1),
-                      border: Border.all(
-                        color: _isListening ? AppTheme.danger : _processing ? AppTheme.accent : AppTheme.primary,
-                        width: 2.5,
+                      gradient: LinearGradient(
+                        colors: _isListening 
+                            ? [Colors.red, Colors.redAccent] 
+                            : [theme.colorScheme.primary, theme.colorScheme.primary.withOpacity(0.8)],
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: (_isListening ? AppTheme.danger : _processing ? AppTheme.accent : AppTheme.primary).withValues(alpha: 0.2),
-                          blurRadius: 20,
-                          spreadRadius: 2,
+                          color: (_isListening ? Colors.red : theme.colorScheme.primary).withOpacity(0.4),
+                          blurRadius: 20, spreadRadius: 5
                         )
-                      ]
+                      ],
                     ),
-                    child: Icon(
-                      _processing ? Icons.hourglass_top_rounded : _isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                       color: _isListening ? AppTheme.danger : _processing ? AppTheme.accent : AppTheme.primary,
-                      size: 40,
-                    ),
+                    child: Icon(_isListening ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 48),
                   ),
-                ]),
-              ]),
+                ),
+              ),
             ),
-          const SizedBox(height: 24),
+          ),
+          if (_isListening) ...[
+            const SizedBox(height: 16),
+            VoiceWave(soundLevel: _soundLevel, isListening: _isListening),
+          ],
+        ],
+      ),
+    );
+  }
 
-          // Record button
-          Center(child: GestureDetector(
-            onTap: () => _isListening ? _stopListening(autoSubmit: true) : _startListening(),
-            child: Container(
-              width: 100, height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isListening ? AppTheme.danger.withOpacity(0.15) : AppTheme.primary.withOpacity(0.12),
-                border: Border.all(color: _isListening ? AppTheme.danger : AppTheme.primary, width: 3),
-              ),
-            ).animate(target: _processing ? 1 : 0).custom(duration: 2000.ms, builder: (context, value, child) => RotationTransition(turns: AlwaysStoppedAnimation(value), child: child)),
+  Widget _buildLiveTranscript(ThemeData theme) {
+    if (!_isListening && _liveText.isEmpty && _spokenText.isEmpty) return const SizedBox();
+    final text = _isListening ? _liveText : _spokenText;
+    if (text.isEmpty) return const SizedBox();
 
-            if (_isListening) ...[
-              const SizedBox(height: 16),
-              VoiceWave(soundLevel: _soundLevel, isListening: _isListening),
-            ],
-
-            const SizedBox(height: 24),
-
-            if (_isListening && _liveText.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark ? AppTheme.danger.withValues(alpha: 0.1) : AppTheme.danger.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  _liveText,
-                  style: GoogleFonts.outfit(color: Theme.of(context).textTheme.bodyLarge?.color, fontSize: 16, height: 1.5, fontWeight: FontWeight.w500),
-                ),
-              ).animate().fadeIn().scale(begin: const Offset(0.95, 0.95)),
-
-            if (_processing)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: AILoadingWidget(),
-              ),
-
-            if (_errorMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: AIErrorWidget(
-                  message: _errorMessage,
-                  onRetry: () {
-                    setState(() { _errorMessage = ''; _processing = true; });
-                    _processVoice();
-                  },
-                ),
-              ),
-
-            if (_spokenText.isNotEmpty && !_isListening && _feedback == null && !_processing) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                    color: Theme.of(context).cardTheme.color ?? (Theme.of(context).brightness == Brightness.dark ? AppTheme.darkCard : AppTheme.lightCard),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkBorder : AppTheme.lightBorder, width: 1.2)),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('YOU SAID', style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
-                  const SizedBox(height: 10),
-                  Text(_spokenText, style: GoogleFonts.outfit(color: Theme.of(context).textTheme.bodyLarge?.color, fontSize: 16, height: 1.5, fontWeight: FontWeight.w500)),
-                ]),
-              ).animate().fadeIn().slideY(begin: 0.1),
-              const SizedBox(height: 16),
-            ],
-            const SizedBox(height: 32),
-          ]),
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
+        ),
+        child: Column(
+          children: [
+            Row(children: [
+              Icon(Icons.auto_awesome_rounded, color: theme.colorScheme.primary, size: 16),
+              const SizedBox(width: 8),
+              Text('REAL-TIME GLOW', style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 1.2, color: theme.colorScheme.primary)),
+            ]),
+            const SizedBox(height: 16),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(fontSize: 16, height: 1.6, fontWeight: FontWeight.w600, color: Colors.black.withOpacity(0.8)),
+            ).animate(onPlay: (ctrl) => ctrl.repeat(reverse: true)).shimmer(duration: 2000.ms, color: theme.colorScheme.primary.withOpacity(0.2)),
+          ],
         ),
       ),
-    ),
-  );
-}
-}
-
-// --- MISSING WIDGETS ADDED BELOW ---
-
-class _FeedbackCard extends StatelessWidget {
-  final ChatMessage message;
-  const _FeedbackCard({required this.message});
-  @override
-  Widget build(BuildContext context) {
-    final score = message.score ?? 7.0;
-    final color = score >= 8 ? AppTheme.primary : score >= 6 ? AppTheme.accent : AppTheme.danger;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Text('🤖 AI Feedback', style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w700, fontSize: 14)),
-          const Spacer(),
-          Text('${score.toStringAsFixed(1)} / 10',
-              style: GoogleFonts.dmSans(color: color, fontWeight: FontWeight.w800, fontSize: 14)),
-        ]),
-        const SizedBox(height: 12),
-        Text(message.text, style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.bodyLarge?.color, fontSize: 14, height: 1.6)),
-        if (message.feedback != null) ...[
-          const SizedBox(height: 10),
-          Text(message.feedback!, style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.7), fontSize: 13, height: 1.5)),
-        ],
-        const SizedBox(height: 12),
-        Text('+${message.xp} XP earned!',
-            style: GoogleFonts.dmSans(color: AppTheme.accent, fontWeight: FontWeight.w700, fontSize: 13)),
-      ]),
     );
   }
 }

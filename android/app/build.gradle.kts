@@ -1,14 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
-    namespace = "com.simra.speakup_ai"
+    namespace = "com.marwadiuniversity.speakup_ai"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -22,7 +27,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.simra.speakup_ai"
+        applicationId = "com.marwadiuniversity.speakup_ai"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -32,11 +37,19 @@ android {
     }
 
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+        getByName("debug") {
         }
+        release {
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    lint {
+        disable += "InvalidPackage"
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 
@@ -46,4 +59,8 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+configurations.all {
+    exclude(group = "com.google.android.play", module = "core")
 }

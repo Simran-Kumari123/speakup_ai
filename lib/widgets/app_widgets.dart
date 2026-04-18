@@ -21,29 +21,30 @@ class FeatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.25)),
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.15)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
-            width: 40, height: 40,
+            width: 44, height: 44,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
+              color: color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 20))),
+            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
           ),
           const Spacer(),
-          Text(title, style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+          Text(title, style: GoogleFonts.dmSans(color: theme.textTheme.titleSmall?.color, fontWeight: FontWeight.w900, fontSize: 13),
             maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Text(description, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 10),
+          const SizedBox(height: 4),
+          Text(description, style: GoogleFonts.dmSans(color: theme.textTheme.bodySmall?.color?.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.bold),
             maxLines: 2, overflow: TextOverflow.ellipsis),
         ]),
       ),
@@ -61,7 +62,8 @@ class ScoreDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? (score >= 8 ? AppTheme.primary : score >= 6 ? AppTheme.accent : AppTheme.danger);
+    final theme = Theme.of(context);
+    final c = color ?? (score >= 8 ? theme.colorScheme.primary : score >= 6 ? AppTheme.earthyAccent : AppTheme.danger);
     return Column(children: [
       SizedBox(
         width: size, height: size,
@@ -69,15 +71,16 @@ class ScoreDisplay extends StatelessWidget {
           CircularProgressIndicator(
             value: score / 10,
             strokeWidth: 4,
-            backgroundColor: AppTheme.darkSurface,
+            backgroundColor: theme.colorScheme.primary.withOpacity(0.05),
             valueColor: AlwaysStoppedAnimation(c),
+            strokeCap: StrokeCap.round,
           ),
-          Text(score.toStringAsFixed(1), style: GoogleFonts.dmSans(color: c, fontWeight: FontWeight.w800, fontSize: size * 0.28)),
+          Text(score.toStringAsFixed(1), style: GoogleFonts.dmSans(color: c, fontWeight: FontWeight.w900, fontSize: size * 0.28)),
         ]),
       ),
       if (label != null) ...[
-        const SizedBox(height: 4),
-        Text(label!, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 10)),
+        const SizedBox(height: 6),
+        Text(label!, style: GoogleFonts.dmSans(color: theme.textTheme.bodySmall?.color?.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold)),
       ],
     ]);
   }
@@ -89,20 +92,21 @@ class StreakBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [AppTheme.accent.withOpacity(0.15), AppTheme.danger.withOpacity(0.08)]),
+        gradient: LinearGradient(colors: [AppTheme.earthyAccent.withOpacity(0.08), AppTheme.danger.withOpacity(0.05)]),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.earthyAccent.withOpacity(0.2)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         const Text('🔥', style: TextStyle(fontSize: 16)),
         const SizedBox(width: 6),
         Text('$streak day${streak != 1 ? 's' : ''}',
-          style: GoogleFonts.dmSans(color: AppTheme.accent, fontWeight: FontWeight.w700, fontSize: 13)),
+          style: GoogleFonts.dmSans(color: AppTheme.earthyAccent, fontWeight: FontWeight.w900, fontSize: 13)),
       ]),
     ).animate(onPlay: (c) => c.repeat(reverse: true))
-        .shimmer(duration: 2000.ms, color: AppTheme.accent.withOpacity(0.1));
+        .shimmer(duration: 2000.ms, color: AppTheme.earthyAccent.withOpacity(0.1));
   }
 }

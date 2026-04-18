@@ -6,6 +6,7 @@ import '../services/app_state.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
+import '../l10n/app_localizations.dart';
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
 class OnboardingScreen extends StatefulWidget {
@@ -17,28 +18,31 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageCtrl = PageController();
   int _page = 0;
+  bool _showAuth = false;
 
   final _pages = [
-    _OnboardPage(emoji: '🎯', title: 'Crack Your\nDream Interview',
+    const _OnboardPage(emoji: '🎯', title: 'Crack Your\nDream Interview',
         subtitle: 'Practice real interview questions with AI feedback. Build confidence before the big day.',
         color: AppTheme.primary),
-    _OnboardPage(emoji: '🎤', title: 'Speak English\nWith Confidence',
+    const _OnboardPage(emoji: '🎤', title: 'Speak English\nWith Confidence',
         subtitle: 'Record your voice, get instant feedback on fluency, grammar and pronunciation.',
         color: AppTheme.secondary),
-    _OnboardPage(emoji: '📈', title: 'Track Your\nProgress Daily',
+    const _OnboardPage(emoji: '📈', title: 'Track Your\nProgress Daily',
         subtitle: 'Earn XP, build streaks, and watch your communication skills improve every day.',
         color: AppTheme.accent),
   ];
 
   @override
   Widget build(BuildContext context) {
+    if (_showAuth) return const AuthScreen();
+
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(child: Column(children: [
         Align(alignment: Alignment.topRight,
             child: Padding(padding: const EdgeInsets.all(20),
                 child: TextButton(onPressed: _goToAuth,
-                    child: Text('Skip', style: TextStyle(color: Colors.white38))))),
+                    child: Text('Skip', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600))))),
         Expanded(child: PageView.builder(
           controller: _pageCtrl,
           onPageChanged: (i) => setState(() => _page = i),
@@ -53,21 +57,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   width: _page == i ? 24 : 8, height: 8,
                   decoration: BoxDecoration(
-                    color: _page == i ? _pages[_page].color : Colors.white24,
+                    color: _page == i ? _pages[_page].color : Theme.of(context).dividerColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ))),
             const SizedBox(height: 32),
-            SizedBox(width: double.infinity, height: 54,
+            SizedBox(width: double.infinity, height: 60,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: _pages[_page].color, foregroundColor: AppTheme.darkBg),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary, // Using earthy theme primary
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: () {
                   if (_page < _pages.length - 1) {
                     _pageCtrl.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
                   } else { _goToAuth(); }
                 },
                 child: Text(_page < _pages.length - 1 ? 'Next →' : 'Get Started 🚀',
-                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, fontSize: 16)),
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w800, fontSize: 16)),
               ),
             ),
           ]),
@@ -76,25 +83,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildPage(_OnboardPage p) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 32),
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Container(width: 140, height: 140,
+  Widget _buildPage(_OnboardPage p) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(width: 140, height: 140,
           decoration: BoxDecoration(shape: BoxShape.circle,
               color: p.color.withOpacity(0.12),
               border: Border.all(color: p.color.withOpacity(0.3), width: 2)),
           child: Center(child: Text(p.emoji, style: const TextStyle(fontSize: 64)))),
       const SizedBox(height: 40),
       Text(p.title, textAlign: TextAlign.center,
-          style: GoogleFonts.dmSans(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white, height: 1.2)),
+          style: Theme.of(context).textTheme.displaySmall),
       const SizedBox(height: 16),
       Text(p.subtitle, textAlign: TextAlign.center,
-          style: GoogleFonts.dmSans(fontSize: 16, color: Colors.white54, height: 1.6)),
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 15, height: 1.6)),
     ]),
-  );
+  ));
 
-  void _goToAuth() => Navigator.pushReplacement(
-      context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+  void _goToAuth() {
+    if (mounted) {
+      setState(() => _showAuth = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
 }
 
 class _OnboardPage {
@@ -118,16 +135,19 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isLogin    = false;
   bool _loading    = false;
   bool _googleLoad = false;
+  bool _guestLoad  = false;
   bool _obscure    = true;
   String _errorMsg = '';
-  String _role     = 'Software Engineer';
-  String _level    = 'Fresher';
+  String _role     = 'roleSoftwareEngineer';
+  String _level    = 'levelFresher';
 
-  final _roles  = ['Software Engineer', 'Data Analyst', 'Product Manager', 'Business Analyst', 'Finance', 'Other'];
-  final _levels = ['Fresher', '1-2 Years', '3-5 Years', '5+ Years'];
+  final _roles  = ['roleSoftwareEngineer', 'roleDataAnalyst', 'roleProductManager', 'roleBusinessAnalyst', 'roleFinance', 'roleOther'];
+  final _levels = ['levelFresher', 'levelYears12', 'levelYears35', 'levelYears5Plus'];
 
-  // ── Email Auth ────────────────────────────────────────────────────────────
   Future<void> _submit() async {
+    // Hide keyboard
+    FocusScope.of(context).unfocus();
+
     // Validate
     if (_emailCtrl.text.trim().isEmpty) {
       setState(() => _errorMsg = 'Please enter your email.'); return;
@@ -142,12 +162,16 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() { _loading = true; _errorMsg = ''; });
 
     AuthResult result;
-    if (_isLogin) {
-      result = await AuthService.signIn(
-          email: _emailCtrl.text, password: _passwordCtrl.text);
-    } else {
-      result = await AuthService.signUp(
-          email: _emailCtrl.text, password: _passwordCtrl.text, name: _nameCtrl.text);
+    try {
+      if (_isLogin) {
+        result = await AuthService.signInEmail(
+            email: _emailCtrl.text, password: _passwordCtrl.text);
+      } else {
+        result = await AuthService.signUp(
+            email: _emailCtrl.text, password: _passwordCtrl.text, name: _nameCtrl.text);
+      }
+    } catch (e) {
+      result = AuthResult.error('Unexpected error: $e');
     }
 
     if (!mounted) return;
@@ -157,11 +181,18 @@ class _AuthScreenState extends State<AuthScreen> {
       _goHome(result.user!);
     } else {
       setState(() => _errorMsg = result.errorMessage ?? 'Something went wrong.');
+      // Display alert dialog so we don't miss any underlying error
+      showDialog(context: context, builder: (_) => AlertDialog(
+        title: const Text('Auth Error'),
+        content: Text(result.errorMessage ?? 'Unknown error occurred.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))]
+      ));
     }
   }
 
   // ── Google Auth ───────────────────────────────────────────────────────────
   Future<void> _googleSignIn() async {
+    FocusScope.of(context).unfocus();
     setState(() { _googleLoad = true; _errorMsg = ''; });
     final result = await AuthService.signInWithGoogle();
     if (!mounted) return;
@@ -192,13 +223,21 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _goHome(User user) {
-    final state = context.read<AppState>();
-    state.login(
-      user.displayName ?? 'Learner',
-      user.email ?? '',
-      role: _role, level: _level,
-    );
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+    if (!mounted) return;
+    try {
+      final state = context.read<AppState>();
+      state.login(
+        user.displayName ?? 'Learner',
+        user.email ?? '',
+        role: _role,
+        level: _level,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Auth Login State Error: $e');
+      if (mounted) {
+        setState(() => _errorMsg = 'Failed to initialize profile. Please try again.');
+      }
+    }
   }
 
   @override
@@ -207,7 +246,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),
@@ -216,21 +255,21 @@ class _AuthScreenState extends State<AuthScreen> {
 
             // Logo
             Center(child: Column(children: [
-              Container(width: 72, height: 72,
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(20),
-                      gradient: const LinearGradient(colors: [AppTheme.primary, AppTheme.secondary])),
-                  child: const Center(child: Text('🎤', style: TextStyle(fontSize: 36)))),
+              Container(width: 80, height: 80,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(28),
+                      color: Theme.of(context).colorScheme.secondary.withOpacity(0.3),
+                      border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.2), width: 2)),
+                  child: const Center(child: Text('🌿', style: TextStyle(fontSize: 40)))),
               const SizedBox(height: 12),
-              Text('SpeakUp', style: GoogleFonts.dmSans(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
-              Text('English & Interview Prep', style: GoogleFonts.dmSans(fontSize: 13, color: Colors.white38)),
+              Text('SpeakUp', style: Theme.of(context).textTheme.headlineMedium),
+              Text('English & Interview Prep', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
             ])),
 
             const SizedBox(height: 36),
 
             // Toggle
             Container(
-              decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.darkBorder)),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04), borderRadius: BorderRadius.circular(14)),
               padding: const EdgeInsets.all(4),
               child: Row(children: [
                 _tab('Sign Up', !_isLogin, () => setState(() { _isLogin = false; _errorMsg = ''; })),
@@ -287,14 +326,14 @@ class _AuthScreenState extends State<AuthScreen> {
             const SizedBox(height: 24),
 
             // Submit button
-            SizedBox(width: double.infinity, height: 52,
+            SizedBox(width: double.infinity, height: 60,
               child: ElevatedButton(
-                onPressed: _loading ? null : _submit,
+                onPressed: (_loading || _googleLoad || _guestLoad) ? null : _submit,
                 child: _loading
                     ? const SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(color: AppTheme.darkBg, strokeWidth: 2))
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : Text(_isLogin ? 'Sign In 🚀' : 'Create Account ✨',
-                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, fontSize: 16)),
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w800, fontSize: 16)),
               ),
             ),
 
@@ -302,30 +341,30 @@ class _AuthScreenState extends State<AuthScreen> {
 
             // Divider
             Row(children: [
-              Expanded(child: Divider(color: AppTheme.darkBorder)),
+              Expanded(child: Divider(color: Theme.of(context).dividerColor.withOpacity(0.1))),
               Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('OR', style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 12))),
-              Expanded(child: Divider(color: AppTheme.darkBorder)),
+                  child: Text('OR', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800, fontSize: 11))),
+              Expanded(child: Divider(color: Theme.of(context).dividerColor.withOpacity(0.1))),
             ]),
 
             const SizedBox(height: 16),
 
             // Google Sign In
-            SizedBox(width: double.infinity, height: 52,
+            SizedBox(width: double.infinity, height: 54,
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppTheme.darkBorder),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                onPressed: _googleLoad ? null : _googleSignIn,
+                    side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.2)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                onPressed: (_loading || _googleLoad || _guestLoad) ? null : _googleSignIn,
                 child: _googleLoad
                     ? const SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2))
+                    child: CircularProgressIndicator(color: AppTheme.earthyAccent, strokeWidth: 2))
                     : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text('G', style: GoogleFonts.dmSans(fontSize: 20, fontWeight: FontWeight.w800,
-                      color: AppTheme.primary)),
+                  Text('G', style: GoogleFonts.dmSans(fontSize: 20, fontWeight: FontWeight.w900,
+                      color: AppTheme.earthyAccent)),
                   const SizedBox(width: 10),
                   Text('Continue with Google',
-                      style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                      style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.bodyLarge?.color, fontWeight: FontWeight.w700, fontSize: 15)),
                 ]),
               ),
             ),
@@ -333,11 +372,23 @@ class _AuthScreenState extends State<AuthScreen> {
             const SizedBox(height: 16),
 
             // Guest
-            Center(child: TextButton(
-              onPressed: () => Navigator.pushReplacement(
-                  context, MaterialPageRoute(builder: (_) => const HomeScreen())),
-              child: Text('Continue as Guest →',
-                  style: GoogleFonts.dmSans(color: Colors.white30, fontSize: 13)),
+            Center(child: _guestLoad 
+              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+              : TextButton(
+                  onPressed: (_loading || _googleLoad || _guestLoad) ? null : () async {
+                    FocusScope.of(context).unfocus();
+                    setState(() { _guestLoad = true; _errorMsg = ''; });
+                    try {
+                      await context.read<AppState>().continueAsGuest();
+                    } catch (e) {
+                      debugPrint('⚠️ Guest Login Error: $e');
+                      if (mounted) {
+                        setState(() { _guestLoad = false; _errorMsg = 'Guest login failed. Please try again.'; });
+                      }
+                    }
+                  },
+                  child: Text('Continue as Guest →',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(decoration: TextDecoration.underline, fontWeight: FontWeight.w600)),
             )),
 
             const SizedBox(height: 24),
@@ -352,46 +403,73 @@ class _AuthScreenState extends State<AuthScreen> {
       child: AnimatedContainer(duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-            color: active ? AppTheme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(8)),
+            color: active ? Theme.of(context).colorScheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(10)),
         child: Text(label, textAlign: TextAlign.center,
-            style: GoogleFonts.dmSans(fontWeight: FontWeight.w600,
-                color: active ? AppTheme.darkBg : Colors.white38)),
+            style: GoogleFonts.dmSans(
+                fontWeight: FontWeight.w800,
+                color: active 
+                    ? Theme.of(context).colorScheme.onPrimary 
+                    : Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6))),
       ),
     ),
   );
 
   Widget _label(String text) => Padding(padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white60)));
+      child: Text(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800, fontSize: 12)));
 
   Widget _field(TextEditingController ctrl, String hint, IconData icon) =>
-      TextField(controller: ctrl, style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(hintText: hint, prefixIcon: Icon(icon, color: AppTheme.primary, size: 20)));
+      TextField(controller: ctrl, style: Theme.of(context).textTheme.bodyMedium,
+          decoration: InputDecoration(hintText: hint, prefixIcon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20)));
 
   Widget _passwordField() => TextField(
     controller: _passwordCtrl, obscureText: _obscure,
-    style: const TextStyle(color: Colors.white),
+    style: Theme.of(context).textTheme.bodyMedium,
     decoration: InputDecoration(
       hintText: '••••••••',
-      prefixIcon: const Icon(Icons.lock_outline, color: AppTheme.primary, size: 20),
+      prefixIcon: Icon(Icons.lock_outline, color: Theme.of(context).colorScheme.primary, size: 20),
       suffixIcon: IconButton(
         icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-            color: Colors.white38, size: 20),
+            color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.3), size: 20),
         onPressed: () => setState(() => _obscure = !_obscure),
       ),
     ),
   );
 
-  Widget _dropdown(List<String> items, String value, void Function(String?) onChange) =>
-      Container(
-        decoration: BoxDecoration(color: AppTheme.darkSurface, borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.darkBorder)),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(value: value, isExpanded: true,
-              dropdownColor: AppTheme.darkCard, style: const TextStyle(color: Colors.white, fontSize: 14),
-              items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: onChange),
-        ),
-      );
+  String _getRoleLabel(String role, AppLocalizations l) {
+    switch (role) {
+      case 'roleSoftwareEngineer': return l.roleSoftwareEngineer;
+      case 'roleDataAnalyst': return l.roleDataAnalyst;
+      case 'roleProductManager': return l.roleProductManager;
+      case 'roleBusinessAnalyst': return l.roleBusinessAnalyst;
+      case 'roleFinance': return l.roleFinance;
+      default: return l.roleOther;
+    }
+  }
+
+  String _getLevelLabel(String level, AppLocalizations l) {
+    switch (level) {
+      case 'levelFresher': return l.levelFresher;
+      case 'levelYears12': return l.levelYears12;
+      case 'levelYears35': return l.levelYears35;
+      case 'levelYears5Plus': return l.levelYears5Plus;
+      default: return level;
+    }
+  }
+
+  Widget _dropdown(List<String> items, String value, void Function(String?) onChange) {
+    final l = AppLocalizations.of(context)!;
+    final isRole = items == _roles;
+    return Container(
+      decoration: BoxDecoration(color: Theme.of(context).inputDecorationTheme.fillColor, borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(value: value, isExpanded: true,
+            dropdownColor: Theme.of(context).scaffoldBackgroundColor, 
+            style: Theme.of(context).textTheme.bodyMedium,
+            items: items.map((e) => DropdownMenuItem(value: e, child: Text(isRole ? _getRoleLabel(e, l) : _getLevelLabel(e, l)))).toList(),
+            onChanged: onChange),
+      ),
+    );
+  }
 }

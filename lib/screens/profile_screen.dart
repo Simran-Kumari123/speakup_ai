@@ -1,13 +1,17 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import '../services/app_state.dart';
 import '../services/auth_service.dart';
-import '../theme/app_theme.dart';
+import '../l10n/app_localizations.dart';
 import 'onboarding_screen.dart';
 import 'settings_screen.dart';
+import 'history_screen.dart';
+import 'help_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -19,11 +23,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _editMode = false;
   late TextEditingController _nameCtrl;
   late TextEditingController _emailCtrl;
-  String _role  = 'Software Engineer';
-  String _level = 'Fresher';
+  String _role  = 'roleSoftwareEngineer';
+  String _level = 'levelFresher';
 
-  final _roles  = ['Software Engineer', 'Data Analyst', 'Product Manager', 'Business Analyst', 'Finance', 'Other'];
-  final _levels = ['Fresher', '1-2 Years', '3-5 Years', '5+ Years'];
+  final _roles  = ['roleSoftwareEngineer', 'roleDataAnalyst', 'roleProductManager', 'roleBusinessAnalyst', 'roleFinance', 'roleExplorer', 'roleOther'];
+  final _levels = ['levelBeginner', 'levelFresher', 'levelYears12', 'levelYears35', 'levelYears5Plus'];
 
   @override
   void initState() {
@@ -31,8 +35,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final p = context.read<AppState>().profile;
     _nameCtrl  = TextEditingController(text: p.name);
     _emailCtrl = TextEditingController(text: p.email);
-    _role  = p.targetRole;
-    _level = p.experienceLevel;
+    
+    // Safety check: ensure role and level exist in the dropdown lists to prevent crashes
+    _role  = _roles.contains(p.targetRole) ? p.targetRole : _roles.last; // Default to 'Other'
+    _level = _levels.contains(p.experienceLevel) ? p.experienceLevel : _levels.first; // Default to 'Beginner'
+  }
+
+  void _revert() {
+    final p = context.read<AppState>().profile;
+    setState(() {
+      _nameCtrl.text = p.name;
+      _emailCtrl.text = p.email;
+      _role = p.targetRole;
+      _level = p.experienceLevel;
+      _editMode = false;
+    });
+  }
+
+  void _save() {
+    final name  = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final l     = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.nameValidation), backgroundColor: theme.colorScheme.error));
+      return;
+    }
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.emailValidation), backgroundColor: theme.colorScheme.error));
+      return;
+    }
+
+    context.read<AppState>().updateProfile(name: name, email: email, role: _role, level: _level);
+    
+    if (mounted) {
+      setState(() => _editMode = false);
+      final l2 = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l2.profileSaved), behavior: SnackBarBehavior.floating));
+    }
   }
 
   @override
@@ -42,197 +84,413 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage(AppState state, ImageSource source) async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: source, 
+      imageQuality: 50, 
+      maxWidth: 500, 
+      maxHeight: 500,
+    );
+    
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
+      final base64 = base64Encode(bytes);
+      state.updateProfilePic(base64);
+      final l2 = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l2.avatarUpdated), behavior: SnackBarBehavior.floating));
+    }
+  }
+
+  void _showImageSourceSheet(AppState state) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Change Profile Photo', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _sourceButton(ctx, Icons.camera_alt_rounded, 'Camera', Colors.blue, () {
+                  Navigator.pop(ctx);
+                  _pickImage(state, ImageSource.camera);
+                }),
+                _sourceButton(ctx, Icons.photo_library_rounded, 'Gallery', Colors.purple, () {
+                  Navigator.pop(ctx);
+                  _pickImage(state, ImageSource.gallery);
+                }),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sourceButton(BuildContext context, IconData icon, String label, Color color, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Column(
+      children: [
+        Container(
+          width: 64, height: 64,
+          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+          child: Icon(icon, color: color, size: 28),
+        ),
+        const SizedBox(height: 10),
+        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800)),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final state   = context.watch<AppState>();
     final profile = state.profile;
+    final theme   = Theme.of(context);
+    final l       = AppLocalizations.of(context)!;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Profile & Settings'),
+        leading: IconButton(
+          icon: Icon(Icons.close, color: theme.colorScheme.onSurface),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(l.profile, style: theme.textTheme.headlineSmall?.copyWith(fontSize: 18)),
+        centerTitle: true,
         actions: [
-          TextButton(
-            onPressed: () {
-              if (_editMode) {
-                state.updateProfile(name: _nameCtrl.text, email: _emailCtrl.text, role: _role, level: _level);
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Profile saved ✅'), backgroundColor: AppTheme.primary, behavior: SnackBarBehavior.floating));
-              }
-              setState(() => _editMode = !_editMode);
-            },
-            child: Text(_editMode ? 'Save' : 'Edit',
-                style: GoogleFonts.dmSans(color: AppTheme.primary, fontWeight: FontWeight.w700)),
+          if (_editMode)
+            IconButton(
+              onPressed: _revert,
+              tooltip: l.cancel,
+              icon: Icon(Icons.close_rounded, color: theme.colorScheme.error),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton(
+              onPressed: () {
+                if (_editMode) {
+                  _save();
+                } else {
+                  setState(() => _editMode = true);
+                }
+              },
+              tooltip: _editMode ? l.save : l.editProfile,
+              icon: Icon(_editMode ? Icons.check_circle_rounded : Icons.edit_note_rounded, 
+                  color: theme.colorScheme.primary, size: 28),
+            ),
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-          // Avatar + name
-          Center(child: Column(children: [
-            Stack(children: [
-              CircleAvatar(
-                radius: 44, backgroundColor: AppTheme.primary.withOpacity(0.12),
-                child: Text(profile.name.isNotEmpty ? profile.name[0].toUpperCase() : '?',
-                    style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 36, fontWeight: FontWeight.w800)),
-              ),
-              if (_editMode) Positioned(bottom: 0, right: 0,
-                  child: Container(width: 26, height: 26,
-                      decoration: const BoxDecoration(shape: BoxShape.circle, color: AppTheme.primary),
-                      child: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.black))),
-            ]),
-            const SizedBox(height: 12),
-            Text(profile.name.isNotEmpty ? profile.name : 'Set your name',
-                style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 20)),
-            Text(profile.targetRole, style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 13)),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-              decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(99),
-                  border: Border.all(color: AppTheme.primary.withOpacity(0.3))),
-              child: Text('Level ${profile.level}  •  ${profile.totalXP} XP',
-                  style: GoogleFonts.dmSans(color: AppTheme.primary, fontWeight: FontWeight.w700, fontSize: 12)),
+          // ── Top Card ──────────────────────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondary, // Sage Green
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [BoxShadow(color: theme.colorScheme.onSurface.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))],
             ),
-          ])),
+            child: Column(children: [
+              Stack(children: [
+                GestureDetector(
+                  onTap: () => _editMode ? _showImageSourceSheet(state) : null,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: theme.colorScheme.primary.withOpacity(0.1), blurRadius: 20, spreadRadius: 5)],
+                    ),
+                    child: CircleAvatar(
+                      radius: 54, 
+                      backgroundColor: theme.inputDecorationTheme.fillColor,
+                      backgroundImage: profile.profilePicBase64 != null 
+                        ? MemoryImage(base64Decode(profile.profilePicBase64!)) : null,
+                      child: profile.profilePicBase64 == null 
+                        ? Text(profile.name.isNotEmpty ? profile.name[0].toUpperCase() : '?',
+                          style: GoogleFonts.dmSans(color: theme.colorScheme.primary, fontSize: 44, fontWeight: FontWeight.w900)) : null,
+                    ),
+                  ),
+                ),
+                if (_editMode) Positioned(bottom: 0, right: 0,
+                    child: GestureDetector(
+                      onTap: () => _showImageSourceSheet(state),
+                      child: Container(width: 32, height: 32,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: theme.colorScheme.primary),
+                          child: Icon(Icons.camera_alt_rounded, size: 16, color: theme.colorScheme.onPrimary)),
+                    )),
+              ]),
+              const SizedBox(height: 18),
+              if (_editMode) ...[
+                _field(context, _nameCtrl, l.name, Icons.person_outline),
+                const SizedBox(height: 12),
+                _field(context, _emailCtrl, l.email, Icons.email_outlined),
+                const SizedBox(height: 12),
+                _dropdown(context, _roles, _role, (v) => setState(() => _role = v!)),
+                const SizedBox(height: 12),
+                _dropdown(context, _levels, _level, (v) => setState(() => _level = v!)),
+              ] else ...[
+                Text(profile.name.isNotEmpty ? profile.name : 'Learner',
+                    style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 4),
+                Text(_getRoleLabel(_role, l), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w900)),
+              ],
+              const SizedBox(height: 20),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                _chip(context, 'Level ${profile.level}', theme.colorScheme.secondary.withOpacity(0.2), theme.colorScheme.primary, Icons.star_rounded),
+                const SizedBox(width: 12),
+                _chip(context, '${NumberFormat('#,###').format(profile.totalXP)} XP', theme.colorScheme.tertiary.withOpacity(0.1), theme.colorScheme.tertiary, Icons.stars_rounded),
+              ]),
+            ]),
+          ),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 32),
 
-          // Edit form
-          if (_editMode) ...[
-            _section('Personal Info'),
-            _label('Name'), _field(_nameCtrl, 'Your full name', Icons.person_outline),
-            const SizedBox(height: 12),
-            _label('Email'), _field(_emailCtrl, 'your@email.com', Icons.email_outlined),
-            const SizedBox(height: 12),
-            _label('Target Role'), _dropdown(_roles, _role, (v) => setState(() => _role = v!)),
-            const SizedBox(height: 12),
-            _label('Experience'), _dropdown(_levels, _level, (v) => setState(() => _level = v!)),
-            const SizedBox(height: 24),
-          ],
+          // ── Account Information ──────────────────────────────────────────────
+          _sectionHeader(context, Icons.info_outline_rounded, l.accountInformation),
+          Container(
+            decoration: BoxDecoration(
+              color: theme.cardColor, 
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [BoxShadow(color: theme.colorScheme.onSurface.withOpacity(0.02), blurRadius: 10)],
+            ),
+            child: Column(children: [
+              _infoTile(context, Icons.person_outline, l.name, profile.name.isEmpty ? l.notSet : profile.name),
+              Divider(height: 1, color: theme.dividerColor.withOpacity(0.05), indent: 56),
+              _infoTile(context, Icons.email_outlined, l.email, profile.email.isEmpty ? l.notSet : profile.email),
+              Divider(height: 1, color: theme.dividerColor.withOpacity(0.05), indent: 56),
+              _infoTile(context, Icons.work_outline, l.targetRole, _getRoleLabel(profile.targetRole, l)),
+              Divider(height: 1, color: theme.dividerColor.withOpacity(0.05), indent: 56),
+              _infoTile(context, Icons.calendar_today_rounded, l.memberSince, DateFormat('dd MMM yyyy').format(profile.joinDate)),
+            ]),
+          ),
 
-          // Info (read only)
-          if (!_editMode) ...[
-            _section('Account Info'),
-            _infoRow(Icons.person_outline,        'Name',         profile.name.isEmpty ? 'Tap Edit to set' : profile.name),
-            _infoRow(Icons.email_outlined,        'Email',        profile.email.isEmpty ? 'Not set' : profile.email),
-            _infoRow(Icons.work_outline,          'Target Role',  profile.targetRole),
-            _infoRow(Icons.trending_up_rounded,   'Experience',   profile.experienceLevel),
-            _infoRow(Icons.calendar_today_rounded,'Member Since', '${profile.joinDate.day}/${profile.joinDate.month}/${profile.joinDate.year}'),
-            const SizedBox(height: 24),
-          ],
+          const SizedBox(height: 32),
 
-          // History snapshot
-          _section('Activity History'),
-          _tileRow(Icons.chat_bubble_outline, 'Chat Sessions', '${state.chatMessages.length} messages', () {}),
-          _tileRow(Icons.work_history_outlined, 'Interview Sessions', '${state.interviewSessions.length} sessions', () {}),
-          _tileRow(Icons.book_outlined, 'Vocabulary', '${state.vocabulary.length} words', () {}),
-          _tileRow(Icons.quiz_outlined, 'Quiz History', '${state.quizHistory.length} quizzes', () {}),
+          // ── Activity Overview ────────────────────────────────────────────────
+          _sectionHeader(context, Icons.analytics_outlined, l.activityOverview),
+          GridView.count(
+            crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.1,
+            children: [
+              _activityCard(context, Icons.record_voice_over_rounded, state.practiceSessions.where((s) => s.type == 'Speaking').length.toString(), 'Speaking', theme.colorScheme.primary, () =>
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen(initialTab: 0)))),
+              _activityCard(context, Icons.assignment_turned_in_outlined, state.interviewSessions.length.toString(), l.interviews, Colors.green.shade600, () =>
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen(initialTab: 1)))),
+              _activityCard(context, Icons.timer_outlined, state.quizHistory.length.toString(), l.quizzes, Colors.orange.shade600, () =>
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen(initialTab: 2)))),
+              _activityCard(context, Icons.book_outlined, state.profile.wordsLearned.toString(), l.vocabulary, theme.colorScheme.tertiary, () =>
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen(initialTab: 3)))),
+            ],
+          ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 32),
 
-          // Settings link
-          _section('App Settings'),
-          _tileRow(Icons.settings_outlined, 'Settings', 'AI personality, difficulty, language', () =>
+          // ── App Settings ─────────────────────────────────────────────────────
+          _sectionHeader(context, Icons.settings_outlined, l.appSettings),
+          _standaloneTile(context, Icons.auto_fix_high_rounded, l.preferences, l.preferencesDesc, () =>
             Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 32),
 
-          // Help
-          _section('Help & Info'),
-          _tileRow(Icons.help_outline,          'How to Use', '', () => _showHelp(context)),
-          _tileRow(Icons.star_outline,          'Rate the App',        '', () => _rateApp()),
-          _tileRow(Icons.share_outlined,        'Share with Friends',  '', () => _shareApp()),
-          _tileRow(Icons.privacy_tip_outlined,  'Privacy Policy',      '', () => _openPrivacyPolicy()),
+          // ── Help & Support ───────────────────────────────────────────────────
+          _sectionHeader(context, Icons.help_outline_rounded, l.helpAndSupport),
+          _simpleTile(context, Icons.menu_book_rounded, l.howToUse, l.howToUseDesc, () =>
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()))),
+          const SizedBox(height: 12),
+          _simpleTile(context, Icons.star_outline_rounded, l.rateOnPlayStore, l.rateOnPlayStoreDesc, () => _rateApp()),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 32),
 
-          // Logout
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.logout_rounded, color: AppTheme.danger, size: 18),
-              label: const Text('Sign Out', style: TextStyle(color: AppTheme.danger)),
-              style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppTheme.danger),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
+          // ── Account ──────────────────────────────────────────────────────────
+          _sectionHeader(context, Icons.logout_rounded, l.account),
+          SizedBox(width: double.infinity, height: 60,
+            child: OutlinedButton(
               onPressed: () => _confirmLogout(state),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: theme.colorScheme.error.withOpacity(0.2)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                backgroundColor: theme.colorScheme.error.withOpacity(0.04),
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.logout_rounded, color: theme.colorScheme.error, size: 20),
+                const SizedBox(width: 12),
+                Text(l.signOut, style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.error, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+              ]),
             ),
           ),
 
-          const SizedBox(height: 12),
-          Center(child: Text('AI Chat Coach v3.0 — English & Interview Prep',
-              style: GoogleFonts.dmSans(color: Colors.white24, fontSize: 11))),
-          const SizedBox(height: 24),
+          const SizedBox(height: 48),
+          Center(child: Text('© 2024 SpeakUp AI. All rights reserved.', 
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 10, color: theme.textTheme.bodySmall?.color?.withOpacity(0.3)))),
+          const SizedBox(height: 48),
         ]),
       ),
     );
   }
 
-  Widget _section(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text(t.toUpperCase(), style: GoogleFonts.dmSans(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2)),
-  );
+  // ── UI Helper Methods ──────────────────────────────────────────────────────
 
-  Widget _label(String t) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Text(t, style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 12)),
-  );
-
-  Widget _field(TextEditingController ctrl, String hint, IconData icon) => TextField(
-    controller: ctrl, style: const TextStyle(color: Colors.white, fontSize: 14),
-    decoration: InputDecoration(hintText: hint, prefixIcon: Icon(icon, color: AppTheme.primary, size: 18), isDense: true),
-  );
-
-  Widget _dropdown(List<String> items, String value, void Function(String?) onChange) =>
-      Container(
-        decoration: BoxDecoration(color: AppTheme.darkSurface, borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.darkBorder)),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: value, isExpanded: true,
-            dropdownColor: AppTheme.darkCard, style: const TextStyle(color: Colors.white, fontSize: 14),
-            items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-            onChanged: onChange,
-          ),
-        ),
-      );
-
-  Widget _infoRow(IconData icon, String label, String value) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.darkBorder)),
+  Widget _sectionHeader(BuildContext context, IconData icon, String title) => Padding(
+    padding: const EdgeInsets.only(bottom: 16, left: 4),
     child: Row(children: [
-      Icon(icon, color: AppTheme.primary, size: 18),
-      const SizedBox(width: 12),
-      Text(label, style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 13)),
-      const Spacer(),
-      Flexible(child: Text(value, textAlign: TextAlign.right,
-          style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13))),
+      Icon(icon, color: Theme.of(context).colorScheme.primary, size: 18),
+      const SizedBox(width: 10),
+      Text(title, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
     ]),
   );
 
-  Widget _tileRow(IconData icon, String label, String trailing, VoidCallback onTap) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(color: AppTheme.darkCard, borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.darkBorder)),
-    child: ListTile(
-      dense: true,
-      leading: Icon(icon, color: AppTheme.primary, size: 18),
-      title: Text(label, style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13)),
-      trailing: trailing.isNotEmpty
-          ? Text(trailing, style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 12))
-          : const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
-      onTap: onTap,
+  Widget _chip(BuildContext context, String text, Color bg, Color textCol, IconData icon) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, color: textCol, size: 14),
+      const SizedBox(width: 8),
+      Text(text, style: GoogleFonts.dmSans(color: textCol, fontWeight: FontWeight.w900, fontSize: 12)),
+    ]),
+  );
+
+  Widget _infoTile(BuildContext context, IconData icon, String label, String value) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Row(children: [
+      Container(width: 40, height: 40,
+        decoration: BoxDecoration(color: Theme.of(context).inputDecorationTheme.fillColor, borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 18),
+      ),
+      const SizedBox(width: 16),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 2),
+        Text(value, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+      ])),
+    ]),
+  );
+
+  Widget _activityCard(BuildContext context, IconData icon, String val, String label, Color color, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: color.withOpacity(0.1)),
+        boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
+      ),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: color.withOpacity(0.08), shape: BoxShape.circle),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(height: 8),
+        Text(val, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22, fontWeight: FontWeight.w900), maxLines: 1),
+        const SizedBox(height: 2),
+        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+      ]),
     ),
   );
 
+  Widget _standaloneTile(BuildContext context, IconData icon, String title, String sub, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.02), blurRadius: 10)],
+      ),
+      child: Row(children: [
+        Container(width: 44, height: 44,
+          decoration: BoxDecoration(color: Theme.of(context).inputDecorationTheme.fillColor, borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
+        ),
+        const SizedBox(width: 16),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+          Text(sub, style: Theme.of(context).textTheme.bodySmall),
+        ])),
+        Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
+      ]),
+    ),
+  );
+
+  Widget _simpleTile(BuildContext context, IconData icon, String title, String sub, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20)),
+      child: Row(children: [
+        Container(width: 40, height: 40,
+          decoration: BoxDecoration(color: Theme.of(context).inputDecorationTheme.fillColor, borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 18),
+        ),
+        const SizedBox(width: 16),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+          Text(sub, style: Theme.of(context).textTheme.bodySmall),
+        ])),
+        Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
+      ]),
+    ),
+  );
+
+  Widget _field(BuildContext context, TextEditingController ctrl, String hint, IconData icon) => TextField(
+    controller: ctrl, style: Theme.of(context).textTheme.bodyMedium,
+    decoration: InputDecoration(hintText: hint, prefixIcon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 18), isDense: true),
+  );
+
+  String _getRoleLabel(String role, AppLocalizations l) {
+    switch (role) {
+      case 'roleSoftwareEngineer': return l.roleSoftwareEngineer;
+      case 'roleDataAnalyst': return l.roleDataAnalyst;
+      case 'roleProductManager': return l.roleProductManager;
+      case 'roleBusinessAnalyst': return l.roleBusinessAnalyst;
+      case 'roleFinance': return l.roleFinance;
+      case 'roleExplorer': return l.roleExplorer;
+      default: return l.roleOther;
+    }
+  }
+
+  String _getLevelLabel(String level, AppLocalizations l) {
+    switch (level) {
+      case 'levelBeginner': return l.levelBeginner;
+      case 'levelFresher': return l.levelFresher;
+      case 'levelYears12': return l.levelYears12;
+      case 'levelYears35': return l.levelYears35;
+      case 'levelYears5Plus': return l.levelYears5Plus;
+      default: return level;
+    }
+  }
+
+  Widget _dropdown(BuildContext context, List<String> items, String value, void Function(String?) onChange) {
+    final l = AppLocalizations.of(context)!;
+    final isRole = items == _roles;
+    return Container(
+      decoration: BoxDecoration(color: Theme.of(context).inputDecorationTheme.fillColor, borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value, isExpanded: true, dropdownColor: Theme.of(context).cardColor,
+          icon: Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.primary),
+          items: items.map((e) => DropdownMenuItem(value: e, child: Text(isRole ? _getRoleLabel(e, l) : _getLevelLabel(e, l), style: Theme.of(context).textTheme.bodyMedium))).toList(),
+          onChanged: onChange,
+        ),
+      ),
+    );
+  }
+
   Future<void> _rateApp() async {
-    const url = 'https://play.google.com/store/apps/details?id=com.speakup.ai';
+    const url = 'https://play.google.com/store/apps/details?id=com.marwadiuniversity.speakup_ai';
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (mounted) {
@@ -244,40 +502,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _shareApp() {
-    Share.share(
-      '🎤 I\'m using AI Chat Coach to improve my English and prepare for placements!\\n\\n'
-          '✅ Mock interviews with AI\\n'
-          '✅ Vocabulary builder\\n'
-          '✅ Real-time feedback\\n\\n'
-          '📲 Download free: https://play.google.com/store/apps/details?id=com.speakup.ai',
-      subject: 'AI Chat Coach — English & Interview Prep App',
-    );
-  }
-
-  void _openPrivacyPolicy() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const _PrivacyPolicyScreen()),
-    );
-  }
-
   void _confirmLogout(AppState state) {
+    final l = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Sign Out?',
-            style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700)),
-        content: Text(
-          'Your progress and XP are saved. You can sign back in anytime.',
-          style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 13, height: 1.5),
-        ),
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(l.signOutConfirm,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+        content: Text(l.signOutMessage, style: Theme.of(context).textTheme.bodySmall),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.dmSans(color: Colors.white38)),
+            child: Text(l.cancel, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5))),
           ),
           TextButton(
             onPressed: () async {
@@ -285,106 +523,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               await AuthService.signOut();
               await state.logout();
               if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const OnboardingScreen()),
                   (route) => false,
                 );
               }
             },
-            child: Text('Sign Out',
-                style: GoogleFonts.dmSans(color: AppTheme.danger, fontWeight: FontWeight.w700)),
+            child: Text(l.signOut,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.w900)),
           ),
         ],
       ),
     );
   }
-
-  void _showHelp(BuildContext ctx) => showDialog(
-    context: ctx,
-    builder: (_) => AlertDialog(
-      backgroundColor: AppTheme.darkCard,
-      title: Text('How to Use AI Chat Coach', style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700)),
-      content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _helpItem('🏠', 'Home',        'Dashboard with your progress, stats and all practice modules'),
-        _helpItem('💬', 'Chat',        'AI chat coach — type or speak, get grammar & fluency feedback'),
-        _helpItem('💼', 'Interview',   'Practice real interview questions with AI scoring & ideal answers'),
-        _helpItem('🎤', 'Speaking',    'Record yourself speaking, get pronunciation & WPM feedback'),
-        _helpItem('🎭', 'Scenarios',   'Guided practice modules for self-intro, workplace, travel'),
-        _helpItem('🎯', 'Mock Int.',   'Upload resume for personalized interview questions'),
-        _helpItem('📖', 'Vocabulary',  'Daily word challenges with AI usage evaluation'),
-        _helpItem('🧠', 'Quiz',        'MCQ & fill-blank quizzes with timer'),
-        _helpItem('🗣️', 'GD Sim',     'Group discussion practice with AI evaluation'),
-        _helpItem('📈', 'Progress',    'Track XP, streaks, badges, accuracy and weak areas'),
-      ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx),
-          child: const Text('Got it!', style: TextStyle(color: AppTheme.primary)))],
-    ),
-  );
-
-  Widget _helpItem(String e, String t, String d) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(e, style: const TextStyle(fontSize: 20)),
-      const SizedBox(width: 10),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(t, style: GoogleFonts.dmSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
-        Text(d, style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 12, height: 1.4)),
-      ])),
-    ]),
-  );
-}
-
-class _PrivacyPolicyScreen extends StatelessWidget {
-  const _PrivacyPolicyScreen();
-
-  static const _sections = [
-    {
-      'title': '1. Information We Collect',
-      'body': '• Name & email you enter during setup\n• Practice answers sent to Gemini API\n• Usage data: sessions, XP, streaks',
-    },
-    {
-      'title': '2. AI & Gemini API',
-      'body': 'AI Chat Coach uses Google\'s Gemini API to generate feedback.\n• Your answer text is sent to Gemini for analysis\n• We do not store raw answers on our servers',
-    },
-    {
-      'title': '3. Data Storage',
-      'body': '• All profile data is stored locally on your device\n• Data is deleted when you uninstall or clear app data',
-    },
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.darkBg,
-      appBar: AppBar(
-        title: const Text('Privacy Policy'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: _sections.map((s) => _buildTile(s['title']!, s['body']!)).toList(),
-      ),
-    );
-  }
-
-  Widget _buildTile(String title, String body) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.darkBorder)),
-    child: ExpansionTile(
-      title: Text(title, style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(body, style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 13, height: 1.6)),
-        ),
-      ],
-    ),
-  );
 }

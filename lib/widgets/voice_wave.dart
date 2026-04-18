@@ -64,7 +64,7 @@ class _VoiceWaveState extends State<VoiceWave> with SingleTickerProviderStateMix
                 decoration: BoxDecoration(
                   color: widget.isListening 
                       ? AppTheme.primary.withValues(alpha: 0.8 - (index.toDouble() - 7).abs() * 0.05)
-                      : AppTheme.textSecondary.withValues(alpha: 0.2),
+                      : AppTheme.earthyText.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(2),
                   boxShadow: widget.isListening ? [
                     BoxShadow(

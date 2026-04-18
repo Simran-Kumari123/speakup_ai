@@ -70,8 +70,9 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('PDF Q&A Generator 📄'),
       ),
@@ -84,6 +85,7 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
   }
 
   Widget _buildUploadPrompt() {
+    final theme = Theme.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -104,16 +106,16 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
             Text(
               'Upload a PDF Document',
               style: GoogleFonts.dmSans(
-                color: Colors.white,
+                color: theme.textTheme.titleLarge?.color,
                 fontSize: 22,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w900,
               ),
             ),
             const SizedBox(height: 12),
             Text(
               'AI will extract text from your PDF and generate\nmeaningful questions & answers for you to study.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 14, height: 1.6),
+              style: GoogleFonts.dmSans(color: theme.textTheme.bodySmall?.color?.withOpacity(0.6), fontSize: 14, height: 1.6, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 32),
             SizedBox(
@@ -125,7 +127,7 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
                 label: const Text('Choose PDF', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
-                  foregroundColor: AppTheme.darkBg,
+                  foregroundColor: theme.colorScheme.onPrimary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   elevation: 0,
                 ),
@@ -147,7 +149,7 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
                     Expanded(
                       child: Text(
                         _errorMessage!,
-                        style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 13),
+                        style: GoogleFonts.dmSans(color: AppTheme.danger, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -161,6 +163,7 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
   }
 
   Widget _buildLoading() {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -179,28 +182,28 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
           const SizedBox(height: 24),
           Text(
             'Analyzing PDF...',
-            style: GoogleFonts.dmSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+            style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.titleLarge?.color, fontSize: 18, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 8),
           Text(
             'Extracting text and generating Q&A',
-            style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 13),
+            style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5), fontSize: 13, fontWeight: FontWeight.w500),
           ),
           if (_fileName != null) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: AppTheme.darkCard,
+                color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: AppTheme.darkBorder),
+                border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.05)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.description_rounded, color: AppTheme.primary, size: 16),
                   const SizedBox(width: 6),
-                  Text(_fileName!, style: GoogleFonts.dmSans(color: Colors.white54, fontSize: 12)),
+                  Text(_fileName!, style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6), fontSize: 12, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -211,6 +214,7 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
   }
 
   Widget _buildQAList() {
+    final theme = Theme.of(context);
     return Column(
       children: [
         // Header
@@ -218,8 +222,8 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
           decoration: BoxDecoration(
-            color: AppTheme.darkCard.withOpacity(0.5),
-            border: const Border(bottom: BorderSide(color: AppTheme.darkBorder, width: 0.5)),
+            color: Theme.of(context).cardColor.withOpacity(0.5),
+            border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.05), width: 0.5)),
           ),
           child: Row(
             children: [
@@ -231,7 +235,7 @@ class _PdfQaScreenState extends State<PdfQaScreen> {
                   children: [
                     Text(
                       _fileName ?? 'Document',
-                      style: GoogleFonts.dmSans(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.dmSans(color: Theme.of(context).textTheme.titleSmall?.color, fontSize: 14, fontWeight: FontWeight.w900),
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
@@ -317,15 +321,15 @@ class _QACardState extends State<_QACard> {
     _ctrl.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.darkBorder),
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,9 +364,9 @@ class _QACardState extends State<_QACard> {
                       child: Text(
                         widget.question,
                         style: GoogleFonts.dmSans(
-                          color: Colors.white,
+                          color: theme.textTheme.titleSmall?.color,
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           height: 1.5,
                         ),
                       ),
@@ -383,10 +387,10 @@ class _QACardState extends State<_QACard> {
                         ),
                         label: Text(_showAnswer ? 'Hide Answer' : 'Show Answer'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.accent,
-                          side: BorderSide(color: AppTheme.accent.withOpacity(0.3)),
+                          foregroundColor: AppTheme.earthyAccent,
+                          side: BorderSide(color: AppTheme.earthyAccent.withOpacity(0.2)),
                           padding: const EdgeInsets.symmetric(vertical: 8),
-                          textStyle: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600),
+                          textStyle: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
@@ -430,11 +434,11 @@ class _QACardState extends State<_QACard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('📖 Answer', style: GoogleFonts.dmSans(
-                      color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.w700,
+                      color: AppTheme.earthyAccent, fontSize: 12, fontWeight: FontWeight.w900,
                     )),
                     const SizedBox(height: 8),
                     Text(widget.answer, style: GoogleFonts.dmSans(
-                      color: Colors.white70, fontSize: 13, height: 1.6,
+                      color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 13, height: 1.6, fontWeight: FontWeight.w500,
                     )),
                   ],
                 ),
@@ -450,7 +454,7 @@ class _QACardState extends State<_QACard> {
                   TextField(
                     controller: _ctrl,
                     maxLines: 4,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: theme.textTheme.bodyMedium,
                     decoration: const InputDecoration(
                       hintText: 'Type your answer here...',
                       alignLabelWithHint: true,
@@ -462,10 +466,10 @@ class _QACardState extends State<_QACard> {
                     child: ElevatedButton(
                       onPressed: _evaluating ? null : _evaluateAnswer,
                       child: _evaluating
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.darkBg),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.onPrimary),
                             )
                           : const Text('Get AI Feedback 🤖'),
                     ),
@@ -499,7 +503,7 @@ class _QACardState extends State<_QACard> {
                           const SizedBox(height: 10),
                           Text(
                             _result!['feedback'] as String,
-                            style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 13, height: 1.5),
+                            style: GoogleFonts.dmSans(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 13, height: 1.5, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 8),
                           Text(

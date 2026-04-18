@@ -1,4 +1,4 @@
-package com.simra.speakup_ai
+package com.marwadiuniversity.speakup_ai
 
 import io.flutter.embedding.android.FlutterActivity
 

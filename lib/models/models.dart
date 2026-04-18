@@ -1,41 +1,97 @@
 // ── User Profile ─────────────────────────────────────────────────────────────
 enum ChallengeType { oneMinute, rapidFire, storyCompletion }
 
+// ── Vocabulary Word ───────────────────────────────────────────────────────────
 class VocabularyWord {
   final String id;
   final String word;
   final String meaning;
+  final String partOfSpeech;
+  final List<String> synonyms;
+  final List<String> antonyms;
   final String example;
   final String pronunciation;
   final String category;
+  bool learned;
+  DateTime date;
+  final String? translatedMeaning;
+  final String? translatedExample;
+  final String? imageUrl;
 
   VocabularyWord({
     required this.id,
     required this.word,
     required this.meaning,
-    required this.example,
+    this.partOfSpeech = '',
+    this.synonyms = const [],
+    this.antonyms = const [],
+    this.example = '',
     this.pronunciation = '',
     this.category = 'general',
-  });
+    this.learned = false,
+    DateTime? date,
+    this.translatedMeaning,
+    this.translatedExample,
+    this.imageUrl,
+  }) : date = date ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'word': word,
     'meaning': meaning,
+    'partOfSpeech': partOfSpeech,
+    'synonyms': synonyms,
+    'antonyms': antonyms,
     'example': example,
     'pronunciation': pronunciation,
     'category': category,
+    'learned': learned,
+    'date': date.toIso8601String(),
+    'translatedMeaning': translatedMeaning,
+    'translatedExample': translatedExample,
+    'imageUrl': imageUrl,
   };
 
   factory VocabularyWord.fromJson(Map<String, dynamic> json) => VocabularyWord(
     id: json['id'] ?? '',
     word: json['word'] ?? '',
     meaning: json['meaning'] ?? '',
+    partOfSpeech: json['partOfSpeech'] ?? '',
+    synonyms: List<String>.from(json['synonyms'] ?? []),
+    antonyms: List<String>.from(json['antonyms'] ?? []),
     example: json['example'] ?? '',
     pronunciation: json['pronunciation'] ?? '',
     category: json['category'] ?? 'general',
+    learned: json['learned'] ?? false,
+    date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
+    translatedMeaning: json['translatedMeaning'],
+    translatedExample: json['translatedExample'],
+    imageUrl: json['imageUrl'],
   );
+
+  VocabularyWord copyWith({
+    String? translatedMeaning,
+    String? translatedExample,
+    String? imageUrl,
+  }) =>
+      VocabularyWord(
+        id: id,
+        word: word,
+        meaning: meaning,
+        partOfSpeech: partOfSpeech,
+        synonyms: synonyms,
+        antonyms: antonyms,
+        example: example,
+        pronunciation: pronunciation,
+        category: category,
+        learned: learned,
+        date: date,
+        translatedMeaning: translatedMeaning ?? this.translatedMeaning,
+        translatedExample: translatedExample ?? this.translatedExample,
+        imageUrl: imageUrl ?? this.imageUrl,
+      );
 }
+
 
 class UserProfile {
   String name;
@@ -56,26 +112,36 @@ class UserProfile {
   Map<String, int> topicProgress;
   List<String> masteredWords;
   List<String> difficultWords;
+  List<WeakArea> weakAreas;
 
-  // ── New fields for AI Chat Coach ──
+  // ── AI Chat Coach Fields ──
   int wordsLearned;
   int quizzesCompleted;
   double accuracy;
-  List<int> weeklyXP; // 7 days of XP
+  List<int> weeklyXP; 
   DateTime lastActiveDate;
   int challengeStreak;
-  String personalityMode; // friendly, strict, hr, debate
-  String difficulty; // beginner, intermediate, advanced
-  String voicePreference; // normal, slow, fast
-  String language; // none, hi, es, etc.
+  String personalityMode;
+  String difficulty; 
+  String voicePreference;
+  String language;
   List<String> learnedVocabIds;
   List<String> weakWords;
+  String voiceStyle; 
+  double voicePitch;
+  String? preferredVoiceId;
+  String? profilePicBase64;
+  String? resumeText;
+  Map<String, dynamic>? resumeAnalysis;
+  List<ResumeRecord> resumes;
+  String? activeResumeId;
+  bool isResumeMode;
 
   UserProfile({
     this.name = '',
     this.email = '',
-    this.targetRole = 'Software Engineer',
-    this.experienceLevel = 'Fresher',
+    this.targetRole = 'roleSoftwareEngineer',
+    this.experienceLevel = 'levelFresher',
     this.totalXP = 0,
     this.streakDays = 0,
     this.practiceMinutes = 0,
@@ -90,58 +156,130 @@ class UserProfile {
     Map<String, int>? topicProgress,
     List<String>? masteredWords,
     List<String>? difficultWords,
-  })  : badges = badges ?? [],
+    this.wordsLearned = 0,
+    this.quizzesCompleted = 0,
+    this.accuracy = 0.0,
+    List<int>? weeklyXP,
+    DateTime? lastActiveDate,
+    this.challengeStreak = 0,
+    this.personalityMode = 'friendly',
+    this.difficulty = 'beginner',
+    this.voicePreference = 'normal',
+    this.voiceStyle = 'female',
+    this.voicePitch = 1.0,
+    this.preferredVoiceId,
+    this.language = 'en',
+    List<String>? learnedVocabIds,
+    List<String>? weakWords,
+    List<WeakArea>? weakAreas,
+    this.profilePicBase64,
+    this.resumeText,
+    this.resumeAnalysis,
+    List<ResumeRecord>? resumes,
+    this.activeResumeId,
+    this.isResumeMode = false,
+  })  : resumes = resumes ?? [],
+        badges = badges ?? [],
         attemptedQuestionIds = attemptedQuestionIds ?? [],
         joinDate = joinDate ?? DateTime.now(),
         recentSessions = recentSessions ?? [],
         topicProgress = topicProgress ?? {},
         masteredWords = masteredWords ?? [],
-        difficultWords = difficultWords ?? [];
+        difficultWords = difficultWords ?? [],
+        weeklyXP = weeklyXP ?? [0, 0, 0, 0, 0, 0, 0],
+        lastActiveDate = lastActiveDate ?? DateTime.now(),
+        learnedVocabIds = learnedVocabIds ?? [],
+        weakWords = weakWords ?? [],
+        weakAreas = weakAreas ?? [];
 
   int get level => (totalXP / 200).floor() + 1;
   int get xpToNext => 200 - (totalXP % 200);
 
-  // Helper getters for progress visualization
-  double get fluencyScore => recentSessions.isEmpty ? 0.0 : (recentSessions.map((e) => e.score).reduce((a, b) => a + b) / recentSessions.length).clamp(0.0, 10.0);
-  double get grammarScore => recentSessions.isEmpty ? 0.0 : (recentSessions.map((e) => (e.score * 0.85).clamp(0.0, 10.0)).reduce((a, b) => a + b) / recentSessions.length);
-  double get confidenceScore => recentSessions.isEmpty ? 0.0 : (recentSessions.map((e) => (e.score * 0.95).clamp(0.0, 10.0)).reduce((a, b) => a + b) / recentSessions.length);
+  double get fluencyScore => recentSessions.isEmpty ? 0.0 : (recentSessions.map((e) => e.fluency).reduce((a, b) => a + b) / recentSessions.length).clamp(0.0, 10.0);
+  double get grammarScore => recentSessions.isEmpty ? 0.0 : (recentSessions.map((e) => e.grammar).reduce((a, b) => a + b) / recentSessions.length).clamp(0.0, 10.0);
+  double get confidenceScore => recentSessions.isEmpty ? 0.0 : (recentSessions.map((e) => e.confidence).reduce((a, b) => a + b) / recentSessions.length).clamp(0.0, 10.0);
 
   Map<String, dynamic> toJson() => {
-        'name': name, 'email': email,
-        'targetRole': targetRole, 'experienceLevel': experienceLevel,
-        'totalXP': totalXP, 'streakDays': streakDays,
-        'practiceMinutes': practiceMinutes, 'sessionsCompleted': sessionsCompleted,
-        'wordsSpoken': wordsSpoken, 'dailyGoalMinutes': dailyGoalMinutes,
-        'badges': badges.map((e) => e.toJson()).toList(),
-        'attemptedQuestionIds': attemptedQuestionIds,
-        'joinDate': joinDate.toIso8601String(),
-        'lastPracticeDate': lastPracticeDate?.toIso8601String(),
-        'recentSessions': recentSessions.map((e) => e.toJson()).toList(),
-        'topicProgress': topicProgress,
-        'masteredWords': masteredWords,
-        'difficultWords': difficultWords,
-      };
+    'name': name, 'email': email,
+    'targetRole': targetRole, 'experienceLevel': experienceLevel,
+    'totalXP': totalXP, 'streakDays': streakDays,
+    'practiceMinutes': practiceMinutes, 'sessionsCompleted': sessionsCompleted,
+    'wordsSpoken': wordsSpoken, 'dailyGoalMinutes': dailyGoalMinutes,
+    'badges': badges.map((e) => e.toJson()).toList(),
+    'attemptedQuestionIds': attemptedQuestionIds,
+    'joinDate': joinDate.toIso8601String(),
+    'lastPracticeDate': lastPracticeDate?.toIso8601String(),
+    'recentSessions': recentSessions.map((e) => e.toJson()).toList(),
+    'topicProgress': topicProgress,
+    'masteredWords': masteredWords,
+    'difficultWords': difficultWords,
+    'wordsLearned': wordsLearned,
+    'quizzesCompleted': quizzesCompleted,
+    'accuracy': accuracy,
+    'weeklyXP': weeklyXP,
+    'lastActiveDate': lastActiveDate.toIso8601String(),
+    'challengeStreak': challengeStreak,
+    'personalityMode': personalityMode,
+    'difficulty': difficulty,
+    'voicePreference': voicePreference,
+    'voiceStyle': voiceStyle,
+    'voicePitch': voicePitch,
+    'preferredVoiceId': preferredVoiceId,
+    'language': language,
+    'learnedVocabIds': learnedVocabIds,
+    'weakWords': weakWords,
+    'weakAreas': weakAreas.map((e) => e.toJson()).toList(),
+    'profilePicBase64': profilePicBase64,
+    'resumeText': resumeText,
+    'resumeAnalysis': resumeAnalysis,
+    'resumes': resumes.map((e) => e.toJson()).toList(),
+    'activeResumeId': activeResumeId,
+    'isResumeMode': isResumeMode,
+  };
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
-        name: j['name'] ?? '', email: j['email'] ?? '',
-        targetRole: j['targetRole'] ?? 'Software Engineer',
-        experienceLevel: j['experienceLevel'] ?? 'Fresher',
-        totalXP: j['totalXP'] ?? 0, streakDays: j['streakDays'] ?? 0,
-        practiceMinutes: j['practiceMinutes'] ?? 0,
-        sessionsCompleted: j['sessionsCompleted'] ?? 0,
-        wordsSpoken: j['wordsSpoken'] ?? 0,
-        dailyGoalMinutes: j['dailyGoalMinutes'] ?? 15,
-        badges: (j['badges'] as List?)?.map((e) => AchievementBadge.fromJson(e)).toList() ?? [],
-        attemptedQuestionIds: List<String>.from(j['attemptedQuestionIds'] ?? []),
-        joinDate: DateTime.tryParse(j['joinDate'] ?? '') ?? DateTime.now(),
-        lastPracticeDate: DateTime.tryParse(j['lastPracticeDate'] ?? ''),
-        recentSessions: (j['recentSessions'] as List?)
-            ?.map((e) => PracticeSession.fromJson(e))
-            .toList(),
-        topicProgress: Map<String, int>.from(j['topicProgress'] ?? {}),
-        masteredWords: List<String>.from(j['masteredWords'] ?? []),
-        difficultWords: List<String>.from(j['difficultWords'] ?? []),
-      );
+    name: j['name'] ?? '', email: j['email'] ?? '',
+    targetRole: j['targetRole'] ?? 'Software Engineer',
+    experienceLevel: j['experienceLevel'] ?? 'Fresher',
+    totalXP: j['totalXP'] ?? 0, 
+    streakDays: j['streakDays'] ?? 0,
+    practiceMinutes: j['practiceMinutes'] ?? 0,
+    sessionsCompleted: j['sessionsCompleted'] ?? 0,
+    wordsSpoken: j['wordsSpoken'] ?? 0,
+    dailyGoalMinutes: j['dailyGoalMinutes'] ?? 15,
+    badges: (j['badges'] as List?)?.map((e) => AchievementBadge.fromJson(e)).toList() ?? [],
+    attemptedQuestionIds: List<String>.from(j['attemptedQuestionIds'] ?? []),
+    joinDate: DateTime.tryParse(j['joinDate'] ?? '') ?? DateTime.now(),
+    lastPracticeDate: DateTime.tryParse(j['lastPracticeDate'] ?? ''),
+    recentSessions: (j['recentSessions'] as List?)
+        ?.map((e) => PracticeSession.fromJson(e))
+        .toList(),
+    topicProgress: Map<String, int>.from(j['topicProgress'] ?? {}),
+    masteredWords: List<String>.from(j['masteredWords'] ?? []),
+    difficultWords: List<String>.from(j['difficultWords'] ?? []),
+    wordsLearned: j['wordsLearned'] ?? 0,
+    quizzesCompleted: j['quizzesCompleted'] ?? 0,
+    accuracy: (j['accuracy'] as num?)?.toDouble() ?? 0.0,
+    weeklyXP: List<int>.from(j['weeklyXP'] ?? [0, 0, 0, 0, 0, 0, 0]),
+    lastActiveDate: DateTime.tryParse(j['lastActiveDate'] ?? '') ?? DateTime.now(),
+    challengeStreak: j['challengeStreak'] ?? 0,
+    personalityMode: j['personalityMode'] ?? 'friendly',
+    difficulty: j['difficulty'] ?? 'beginner',
+    voicePreference: j['voicePreference'] ?? 'normal',
+    voiceStyle: j['voiceStyle'] ?? 'female',
+    voicePitch: (j['voicePitch'] as num?)?.toDouble() ?? 1.0,
+    preferredVoiceId: j['preferredVoiceId'],
+    language: j['language'] ?? 'en',
+    learnedVocabIds: List<String>.from(j['learnedVocabIds'] ?? []),
+    weakWords: List<String>.from(j['weakWords'] ?? []),
+    weakAreas: (j['weakAreas'] as List?)?.map((e) => WeakArea.fromJson(e)).toList() ?? [],
+    profilePicBase64: j['profilePicBase64'],
+    resumeText: j['resumeText'],
+    resumeAnalysis: j['resumeAnalysis'] != null ? Map<String, dynamic>.from(j['resumeAnalysis']) : null,
+    resumes: (j['resumes'] as List?)?.map((e) => ResumeRecord.fromJson(e)).toList() ?? [],
+    activeResumeId: j['activeResumeId'],
+    isResumeMode: j['isResumeMode'] ?? false,
+  );
 }
 
 // ── Practice Session ────────────────────────────────────────────────────────
@@ -151,17 +289,22 @@ class PracticeSession {
   final String? topicId; 
   final String type;
   final double score;
+  final double fluency;
+  final double grammar;
+  final double confidence;
   final int xp;
   final DateTime date;
 
   PracticeSession({
     required this.id, required this.topic, required this.type,
     required this.score, required this.xp, DateTime? date, this.topicId,
+    this.fluency = 0.0, this.grammar = 0.0, this.confidence = 0.0,
   }) : date = date ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
     'id': id, 'topic': topic, 'topicId': topicId, 'type': type,
     'score': score, 'xp': xp, 'date': date.toIso8601String(),
+    'fluency': fluency, 'grammar': grammar, 'confidence': confidence,
   };
 
   factory PracticeSession.fromJson(Map<String, dynamic> j) => PracticeSession(
@@ -170,6 +313,9 @@ class PracticeSession {
     score: (j['score'] as num?)?.toDouble() ?? 0.0,
     xp: j['xp'] ?? 0,
     date: DateTime.tryParse(j['date'] ?? '') ?? DateTime.now(),
+    fluency: (j['fluency'] as num?)?.toDouble() ?? (j['score'] as num?)?.toDouble() ?? 0.0,
+    grammar: (j['grammar'] as num?)?.toDouble() ?? (j['score'] as num?)?.toDouble() ?? 0.0,
+    confidence: (j['confidence'] as num?)?.toDouble() ?? (j['score'] as num?)?.toDouble() ?? 0.0,
   );
 }
 
@@ -202,13 +348,19 @@ class ChatMessage {
   final String? feedback;
   final int xp;
   final double? score;      
+  final double? fluency;
+  final double? grammar;
+  final double? confidence;
   final String? participantName;
+  final String? translatedText;
 
   ChatMessage({
     required this.id, required this.text, required this.sender,
     this.type = MsgType.text, DateTime? time,
     this.feedback, this.xp = 0, this.score,
+    this.fluency, this.grammar, this.confidence,
     this.participantName,
+    this.translatedText,
   }) : time = time ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -216,6 +368,8 @@ class ChatMessage {
     'sender': sender.index, 'type': type.index,
     'time': time.toIso8601String(),
     'feedback': feedback, 'xp': xp, 'score': score,
+    'fluency': fluency, 'grammar': grammar, 'confidence': confidence,
+    'participantName': participantName, 'translatedText': translatedText,
   };
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
@@ -227,56 +381,19 @@ class ChatMessage {
     feedback: j['feedback'],
     xp: j['xp'] ?? 0,
     score: (j['score'] as num?)?.toDouble(),
+    fluency: (j['fluency'] as num?)?.toDouble(),
+    grammar: (j['grammar'] as num?)?.toDouble(),
+    confidence: (j['confidence'] as num?)?.toDouble(),
+    participantName: j['participantName'],
+    translatedText: j['translatedText'],
   );
-}
 
-// ── Vocabulary Word ───────────────────────────────────────────────────────────
-class VocabularyWord {
-  final String id;
-  final String word;
-  final String meaning;
-  final String partOfSpeech;
-  final List<String> synonyms;
-  final List<String> antonyms;
-  final String example;
-  final String pronunciation;
-  bool learned;
-  DateTime date;
-
-  VocabularyWord({
-    required this.id,
-    required this.word,
-    required this.meaning,
-    this.partOfSpeech = '',
-    List<String>? synonyms,
-    List<String>? antonyms,
-    this.example = '',
-    this.pronunciation = '',
-    this.learned = false,
-    DateTime? date,
-  })  : synonyms = synonyms ?? [],
-        antonyms = antonyms ?? [],
-        date = date ?? DateTime.now();
-
-  Map<String, dynamic> toJson() => {
-    'id': id, 'word': word, 'meaning': meaning,
-    'partOfSpeech': partOfSpeech,
-    'synonyms': synonyms, 'antonyms': antonyms,
-    'example': example, 'pronunciation': pronunciation,
-    'learned': learned, 'date': date.toIso8601String(),
-  };
-
-  factory VocabularyWord.fromJson(Map<String, dynamic> j) => VocabularyWord(
-    id: j['id'] ?? '',
-    word: j['word'] ?? '',
-    meaning: j['meaning'] ?? '',
-    partOfSpeech: j['partOfSpeech'] ?? '',
-    synonyms: List<String>.from(j['synonyms'] ?? []),
-    antonyms: List<String>.from(j['antonyms'] ?? []),
-    example: j['example'] ?? '',
-    pronunciation: j['pronunciation'] ?? '',
-    learned: j['learned'] ?? false,
-    date: DateTime.tryParse(j['date'] ?? '') ?? DateTime.now(),
+  ChatMessage copyWith({String? translatedText}) => ChatMessage(
+    id: id, text: text, sender: sender, type: type, time: time,
+    feedback: feedback, xp: xp, score: score,
+    fluency: fluency, grammar: grammar, confidence: confidence,
+    participantName: participantName,
+    translatedText: translatedText ?? this.translatedText,
   );
 }
 
@@ -402,12 +519,13 @@ class InterviewQA {
 // ── Daily Challenge ───────────────────────────────────────────────────────────
 class DailyChallenge {
   final String id;
-  final String type; // speaking, vocab, quiz
+  final String type; // shadow, detective, connect
   final String title;
   final String description;
   final int xpReward;
   bool completed;
   final DateTime date;
+  final Map<String, dynamic>? dynamicContent;
 
   DailyChallenge({
     required this.id,
@@ -417,12 +535,14 @@ class DailyChallenge {
     this.xpReward = 20,
     this.completed = false,
     DateTime? date,
+    this.dynamicContent,
   }) : date = date ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
     'id': id, 'type': type, 'title': title,
     'description': description, 'xpReward': xpReward,
     'completed': completed, 'date': date.toIso8601String(),
+    'dynamicContent': dynamicContent,
   };
 
   factory DailyChallenge.fromJson(Map<String, dynamic> j) => DailyChallenge(
@@ -433,6 +553,7 @@ class DailyChallenge {
     xpReward: j['xpReward'] ?? 20,
     completed: j['completed'] ?? false,
     date: DateTime.tryParse(j['date'] ?? '') ?? DateTime.now(),
+    dynamicContent: j['dynamicContent'],
   );
 }
 
@@ -502,24 +623,27 @@ class PracticeTopic {
   final String emoji;
   final String description;
   final String level;
-  int progress;
   final int xpReward;
   final String colorHex;
 
   PracticeTopic({
-    required this.id, required this.title, required this.emoji,
-    required this.description, required this.level,
-    this.progress = 0, this.xpReward = 50,
+    required this.id, 
+    required this.title, 
+    required this.emoji,
+    required this.description, 
+    required this.level,
+    this.xpReward = 50,
     this.colorHex = 'FF6366F1', // Default Indigo
   });
 }
 
 // ── Static Data ───────────────────────────────────────────────────────────────
 final List<PracticeTopic> kPracticeTopics = [
-  PracticeTopic(id: 'p1', title: 'Self Introduction',  emoji: '🙋', description: 'Tell me about yourself', level: 'Beginner', progress: 70, xpReward: 30, colorHex: 'FF6366F1'),
-  PracticeTopic(id: 'p2', title: 'Workplace English',  emoji: '💼', description: 'Emails, meetings & more', level: 'Beginner', progress: 40, xpReward: 40, colorHex: 'FF10B981'),
-  PracticeTopic(id: 'p3', title: 'Group Discussion',   emoji: '🗣️', description: 'GD tips & practice',      level: 'Intermediate', progress: 20, xpReward: 50, colorHex: 'FFF59E0B'),
-  PracticeTopic(id: 'p4', title: 'Vocabulary Builder', emoji: '📖', description: 'Power words for success', level: 'Intermediate', progress: 30, xpReward: 45, colorHex: 'FF3ABEF9'),
+  PracticeTopic(id: 'p5', title: 'Ordering Food', emoji: '🍔', description: 'Restaurant & Cafe role-play', level: 'Beginner', xpReward: 35, colorHex: 'FFFFA726'),
+  PracticeTopic(id: 'p6', title: 'Phone Calls', emoji: '📞', description: 'Appointments & Support', level: 'Intermediate', xpReward: 40, colorHex: 'FF29B6F6'),
+  PracticeTopic(id: 'p7', title: 'Shopping', emoji: '🛍️', description: 'Buying & Returning items', level: 'Beginner', xpReward: 30, colorHex: 'FFEC407A'),
+  PracticeTopic(id: 'p1', title: 'Self Introduction',  emoji: '🙋', description: 'Tell me about yourself', level: 'Beginner', xpReward: 30, colorHex: 'FF6366F1'),
+  PracticeTopic(id: 'p2', title: 'Workplace English',  emoji: '💼', description: 'Emails, meetings & more', level: 'Beginner', xpReward: 40, colorHex: 'FF10B981'),
 ];
 
 // ── Question Model ──────────────────────────────────────────────────────────
@@ -567,6 +691,47 @@ class Question {
     'estimatedTime': estimatedTime,
     'followUp': followUp,
   };
+}
+
+// ── Resume Record ───────────────────────────────────────────────────────────
+class ResumeRecord {
+  final String id;
+  final String fileName;
+  final String text;
+  final Map<String, dynamic> analysis;
+  final String? roleTag;
+  final List<String> skills;
+  final DateTime date;
+
+  ResumeRecord({
+    required this.id,
+    required this.fileName,
+    required this.text,
+    required this.analysis,
+    this.roleTag,
+    this.skills = const [],
+    DateTime? date,
+  }) : date = date ?? DateTime.now();
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'fileName': fileName,
+    'text': text,
+    'analysis': analysis,
+    'roleTag': roleTag,
+    'skills': skills,
+    'date': date.toIso8601String(),
+  };
+
+  factory ResumeRecord.fromJson(Map<String, dynamic> json) => ResumeRecord(
+    id: json['id'] ?? '',
+    fileName: json['fileName'] ?? '',
+    text: json['text'] ?? '',
+    analysis: Map<String, dynamic>.from(json['analysis'] ?? {}),
+    roleTag: json['roleTag'],
+    skills: List<String>.from(json['skills'] ?? []),
+    date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
+  );
 }
 
 // Practice categories

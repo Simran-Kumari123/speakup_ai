@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
@@ -24,6 +25,7 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
   }
 
   Future<void> _check() async {
+    if (kIsWeb) return; // InternetAddress.lookup is not supported on web
     try {
       final result = await InternetAddress.lookup('google.com')
           .timeout(const Duration(seconds: 4));

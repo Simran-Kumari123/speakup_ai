@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/translation_service.dart';
-import '../theme/app_theme.dart';
 
 /// Dropdown widget for selecting a translation language
 class LanguageSelector extends StatelessWidget {
@@ -16,28 +15,29 @@ class LanguageSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final languages = TranslationService.supportedLanguages;
+    const languages = TranslationService.supportedLanguages;
+    final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: theme.colorScheme.primary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.05)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: selectedLangCode,
-          dropdownColor: AppTheme.darkCard,
-          icon: const Icon(Icons.translate_rounded, color: AppTheme.primary, size: 18),
+          dropdownColor: theme.cardColor,
+          icon: Icon(Icons.translate_rounded, color: theme.colorScheme.primary, size: 18),
           isDense: true,
-          style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13),
+          style: GoogleFonts.dmSans(color: theme.textTheme.bodyMedium?.color, fontSize: 13, fontWeight: FontWeight.w600),
           items: languages.entries.map((entry) {
             return DropdownMenuItem<String>(
               value: entry.key,
               child: Text(
                 '${entry.value['flag']} ${entry.value['name']}',
-                style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13),
+                style: GoogleFonts.dmSans(color: theme.textTheme.bodyMedium?.color, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             );
           }).toList(),

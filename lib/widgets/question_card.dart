@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../models/question_model.dart';
+import '../models/models.dart';
+
 import '../theme/app_theme.dart';
 
 class QuestionCard extends StatefulWidget {
@@ -34,23 +35,18 @@ class _QuestionCardState extends State<QuestionCard> {
             ? Colors.orange
             : Colors.red;
 
+    final theme = Theme.of(context);
+
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.darkCard,
-            AppTheme.darkCard.withOpacity(0.8),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.darkBorder),
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.05), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primary.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: theme.colorScheme.onSurface.withOpacity(0.03), 
+            blurRadius: 15, 
+            offset: const Offset(0, 8)
           ),
         ],
       ),
@@ -68,44 +64,51 @@ class _QuestionCardState extends State<QuestionCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Category + Difficulty
-                        Row(
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: AppTheme.primary.withOpacity(0.15),
+                                color: AppTheme.primary.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: Text(
-                                categoryEmojis[widget.question.category] ?? '📝',
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                widget.question.category.toUpperCase(),
-                                style: GoogleFonts.dmSans(
-                                  color: Colors.white60,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 1,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    categoryEmojis[widget.question.category] ?? '📝',
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    widget.question.category.toUpperCase(),
+                                    style: GoogleFonts.dmSans(
+                                      color: AppTheme.earthyText.withOpacity(0.7),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: difficultyColor.withOpacity(0.15),
+                                color: difficultyColor.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: difficultyColor.withOpacity(0.3)),
+                                border: Border.all(color: difficultyColor.withOpacity(0.2)),
                               ),
                               child: Text(
                                 widget.question.difficulty.toUpperCase(),
                                 style: GoogleFonts.dmSans(
                                   color: difficultyColor,
                                   fontSize: 10,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ),
@@ -126,18 +129,21 @@ class _QuestionCardState extends State<QuestionCard> {
               // Question Text
               Text(
                 widget.question.text,
-                style: GoogleFonts.dmSans(
-                  color: Colors.white,
-                  fontSize: 20,
+                style: GoogleFonts.outfit(
+                  color: AppTheme.earthyText,
+                  fontSize: 21,
                   fontWeight: FontWeight.w700,
                   height: 1.4,
+                  letterSpacing: -0.2,
                 ),
               ).animate().fadeIn(duration: 500.ms),
 
               const SizedBox(height: 24),
 
               // Timer + Stats Row
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   // Estimated Time
                   Container(
@@ -148,6 +154,7 @@ class _QuestionCardState extends State<QuestionCard> {
                       border: Border.all(color: Colors.blue.withOpacity(0.2)),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min, // prevent stretching
                       children: [
                         const Icon(Icons.timer_outlined, color: Colors.blue, size: 16),
                         const SizedBox(width: 6),
@@ -162,7 +169,6 @@ class _QuestionCardState extends State<QuestionCard> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
                   // Question Type
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -172,15 +178,18 @@ class _QuestionCardState extends State<QuestionCard> {
                       border: Border.all(color: AppTheme.secondary.withOpacity(0.2)),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min, // prevent stretching
                       children: [
                         const Icon(Icons.mic_rounded, color: AppTheme.secondary, size: 16),
                         const SizedBox(width: 6),
-                        Text(
-                          widget.question.type.replaceAll('_', ' ').toUpperCase(),
-                          style: GoogleFonts.dmSans(
-                            color: AppTheme.secondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            widget.question.type.replaceAll('_', ' ').toUpperCase(),
+                            style: GoogleFonts.dmSans(
+                              color: AppTheme.secondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -249,16 +258,17 @@ class _QuestionCardState extends State<QuestionCard> {
                                 child: Text(
                                   e.value,
                                   style: GoogleFonts.dmSans(
-                                    color: Colors.white70,
-                                    fontSize: 13,
-                                    height: 1.4,
+                                    color: AppTheme.earthyText.withOpacity(0.8),
+                                    fontSize: 14,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),
                             ],
                           ),
                         );
-                      }).toList(),
+                      }),
                     ],
                   ],
                 ),
@@ -283,10 +293,11 @@ class _QuestionCardState extends State<QuestionCard> {
                         child: Text(
                           'Follow-up: ${widget.question.followUp}',
                           style: GoogleFonts.dmSans(
-                            color: Colors.white70,
+                            color: AppTheme.earthyText.withOpacity(0.6),
                             fontSize: 12,
-                            height: 1.4,
+                            height: 1.5,
                             fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
